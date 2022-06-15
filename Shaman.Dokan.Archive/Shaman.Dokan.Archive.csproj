@@ -3,18 +3,16 @@
     <OutputType>Exe</OutputType>
     <TargetFramework>net46</TargetFramework>
     <AssemblyOriginatorKeyFile>ShamanOpenSourceKey.snk</AssemblyOriginatorKeyFile>
-    <SignAssembly>true</SignAssembly>
+    <SignAssembly>false</SignAssembly>
     <PublicSign Condition=" '$(OS)' != 'Windows_NT' ">true</PublicSign>
     <Prefer32Bit>true</Prefer32Bit>
   </PropertyGroup>
-  <ItemGroup />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <DefineConstants />
+    <PlatformTarget>x64</PlatformTarget>
+  </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Shaman.SevenZipSharp" Version="1.0.6.3" />
-    <PackageReference Include="Shaman.Dokan.Base" Version="1.0.0.1" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Update="7z.dll">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
+    <PackageReference Include="DokanNet" Version="2.0.4.1" />
+    <PackageReference Include="Squid-Box.SevenZipSharp.Lite" Version="1.5.0.366" />
   </ItemGroup>
 </Project>
