@@ -150,7 +150,8 @@ namespace Shaman.Dokan
         protected static Func<string, bool> GetMatcher(string searchPattern)
         {
             if (searchPattern == "*") return (k) => true;
-            if (searchPattern.IndexOf('?') == -1 && searchPattern.IndexOf('*') == -1) return key => key.Equals(searchPattern, StringComparison.OrdinalIgnoreCase);
+            if (searchPattern.IndexOf('?') == -1 && searchPattern.IndexOf('*') == -1)
+                return key => key.Equals(searchPattern, StringComparison.OrdinalIgnoreCase);
             var regex = "^" + Regex.Escape(searchPattern).Replace(@"\*", ".*").Replace(@"\?", ".") + "$";
             return key => Regex.IsMatch(key, regex, RegexOptions.IgnoreCase);
         }
@@ -326,88 +327,52 @@ namespace Shaman.Dokan
 
         public class FsNode<T>
         {
-            public object Tag { get; set; }
-            public T Info { get; set; }
-            private List<FsNode<T>> _children;
-            public List<FsNode<T>> Children
-            {
-                get
-                {
-                    if (_children != null) return _children;
-                    if (GetChildrenDelegate != null)
-                    {
-                        _children = GetChildrenDelegate();
-                        return _children;
-                    }
-                    return null;
-                }
-                set
-                {
-                    _children = value;
-                }
-            }
-            public Func<List<FsNode<T>>> GetChildrenDelegate { get; set; }
-            public string Name { get; set; }
-
-            public override string ToString()
-            {
-                return Name;
-            }
+            public T Info;
+            public Dictionary<string, FsNode<T>> Children;
         }
 
-        protected static FsNode<T> GetNode<T>(FsNode<T> root, string path)
+        protected static FsNode<T> GetNode<T>(FsNode<T> root, string path, out string baseName)
         {
             var components = path.Split(new char[] { '\\' }, StringSplitOptions.RemoveEmptyEntries);
 
             var current = root;
+            baseName = components.LastOrDefault();
             foreach (var item in components)
-            {
-                if (current.Children == null) return null;
-                current = current.Children.FirstOrDefault(x => x.Name.Equals(item, StringComparison.Ordinal));
-                if (current == null) return null;
-            }
+                if (current.Children?.TryGetValue(item, out current) != true)
+                    return null;
             return current;
         }
 
-        protected static FsNode<T> CreateTree<T>(IEnumerable<T> allfiles, Func<T, string> getPath, Func<T, bool> isDirectory = null, Action<FsNode<T>> postprocess = null)
+        protected static FsNode<T> CreateTree<T>(IEnumerable<T> allfiles, Func<T, string> getPath, Func<T, bool> isDirectory = null)
         {
-            var directories = new Dictionary<string, FsNode<T>>(StringComparer.OrdinalIgnoreCase);
+            var dict = new Dictionary<string, FsNode<T>>(StringComparer.Ordinal);
 
-            var root = new FsNode<T>();
-            root.Name = "(Root)";
-            directories[string.Empty] = root;
+            var root = new FsNode<T>() { Children = new Dictionary<string, FsNode<T>>() };
+            dict[string.Empty] = root;
             foreach (var file in allfiles)
             {
                 string name;
                 var path = getPath(file);
-                var directory = GetDirectory(path, directories, out name);
-                if (directory.Children == null) directory.Children = new List<FsNode<T>>();
+
+                var directory = GetDirectory(path, dict, out name);
 
                 FsNode<T> f;
 
                 if (isDirectory != null && isDirectory(file))
                 {
-                    if (directories.TryGetValue(path, out var ff))
+                    if (!dict.TryGetValue(path, out f))
                     {
-                        f = ff;
-                    }
-                    else
-                    {
-                        f = new FsNode<T>();
-                        directories[path] = f;
-                        directory.Children.Add(f);
+                        f = new FsNode<T>() { Children = new Dictionary<string, FsNode<T>>() };
+                        directory.Children[name] = f;
+                        dict[path] = f;
                     }
                 }
                 else
                 {
                     f = new FsNode<T>();
-                    directory.Children.Add(f);
+                    directory.Children[name] = f;
                 }
-
-                f.Name = name;
                 f.Info = file;
-                if (postprocess != null) postprocess(f);
-
             }
             return root;
         }
@@ -424,20 +389,44 @@ namespace Shaman.Dokan
             {
                 string currname;
                 var parent = GetDirectory(directoryPath, dict, out currname);
-                if (parent.Children == null) parent.Children = new List<FsNode<T>>();
-                directory = new FsNode<T>();
-                directory.Name = currname;
-                if (directory.Name.Length == 2 && directory.Name[1] == ':')
-                    directory.Name = currname[0].ToString();
-                parent.Children.Add(directory);
+                directory = new FsNode<T>() { Children = new Dictionary<string, FsNode<T>>() };
+                if (currname.Length == 2 && currname[1] == ':')
+                    currname = currname[0].ToString();
+                parent.Children[currname] = directory;
                 dict[directoryPath] = directory;
             }
 
             return directory;
         }
 
-        //[Configuration]
-        //private static string Configuration_DokanFsRoot = Environment.GetEnvironmentVariable("DOKAN_FS_ROOT") ?? @"C:\DokanFs";
-
+        public static void ForEachFile<T>(FsNode<T> root, Action<T> callback)
+        {
+            if (root.Children == null)
+            {
+                callback(root.Info);
+                return;
+            }
+            var top = root.Children.GetEnumerator();
+            var stack = new Stack<Dictionary<string, FsNode<T>>.Enumerator>();
+            stack.Push(top);
+            while (stack.Count > 0)
+            {
+                top = stack.Pop();
+                while (top.MoveNext())
+                {
+                    var next = top.Current.Value;
+                    if (next.Children != null)
+                    {
+                        if (next.Children.Count > 0)
+                        {
+                            stack.Push(top);
+                            top = next.Children.GetEnumerator();
+                        }
+                    }
+                    else if (next.Info != null)
+                        callback(next.Info);
+                }
+            }
+        }
     }
 }

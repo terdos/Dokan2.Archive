@@ -308,11 +308,6 @@ namespace SevenZip
                 type = "SevenZipExtractor";
             }
 
-            if (this is SevenZipCompressor)
-            {
-                type = "SevenZipCompressor";
-            }
-
             return $"{type} [{_uniqueID}]";
         }
     }

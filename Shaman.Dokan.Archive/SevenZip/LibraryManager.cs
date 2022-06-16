@@ -213,22 +213,6 @@ namespace SevenZip
             return true;
         }
 
-        private static bool CompressionBenchmark(Stream inStream, Stream outStream, OutArchiveFormat format, CompressionMethod method, ref LibraryFeature? features, LibraryFeature testedFeature)
-        {
-            try
-            {
-                var compressor = new SevenZipCompressor { ArchiveFormat = format, CompressionMethod = method };
-                compressor.CompressStream(inStream, outStream);
-            }
-            catch (Exception)
-            {
-                return false;
-            }
-
-            features |= testedFeature;
-            return true;
-        }
-
         public static LibraryFeature CurrentLibraryFeatures
         {
             get
@@ -274,62 +258,6 @@ namespace SevenZip
                         ExtractionBenchmark("Test.txt.gz", outStream, ref _features, LibraryFeature.ExtractGzip);
                         ExtractionBenchmark("Test.txt.xz", outStream, ref _features, LibraryFeature.ExtractXz);
                         ExtractionBenchmark("Test.zip", outStream, ref _features, LibraryFeature.ExtractZip);
-                    }
-
-                    #endregion
-
-                    #region Compression features
-
-                    using (var inStream = new MemoryStream())
-                    {
-                        inStream.Write(Encoding.UTF8.GetBytes("Test"), 0, 4);
-
-                        using (var outStream = new MemoryStream())
-                        {
-                            CompressionBenchmark(inStream, outStream,
-                                OutArchiveFormat.SevenZip, CompressionMethod.Lzma,
-                                ref _features, LibraryFeature.Compress7z);
-                            CompressionBenchmark(inStream, outStream,
-                                OutArchiveFormat.SevenZip, CompressionMethod.Lzma2,
-                                ref _features, LibraryFeature.Compress7zLZMA2);
-
-                            var i = 0;
-
-                            if (CompressionBenchmark(inStream, outStream,
-                                OutArchiveFormat.SevenZip, CompressionMethod.BZip2,
-                                ref _features, _features.Value))
-                            {
-                                i++;
-                            }
-
-                            if (CompressionBenchmark(inStream, outStream,
-                                OutArchiveFormat.SevenZip, CompressionMethod.Ppmd,
-                                ref _features, _features.Value))
-                            {
-                                i++;
-                                if (i == 2 && (_features & LibraryFeature.Compress7z) != 0 &&
-                                (_features & LibraryFeature.Compress7zLZMA2) != 0)
-                                {
-                                    _features |= LibraryFeature.Compress7zAll;
-                                }
-                            }
-
-                            CompressionBenchmark(inStream, outStream,
-                                OutArchiveFormat.Zip, CompressionMethod.Default,
-                                ref _features, LibraryFeature.CompressZip);
-                            CompressionBenchmark(inStream, outStream,
-                                OutArchiveFormat.BZip2, CompressionMethod.Default,
-                                ref _features, LibraryFeature.CompressBzip2);
-                            CompressionBenchmark(inStream, outStream,
-                                OutArchiveFormat.GZip, CompressionMethod.Default,
-                                ref _features, LibraryFeature.CompressGzip);
-                            CompressionBenchmark(inStream, outStream,
-                                OutArchiveFormat.Tar, CompressionMethod.Default,
-                                ref _features, LibraryFeature.CompressTar);
-                            CompressionBenchmark(inStream, outStream,
-                                OutArchiveFormat.XZ, CompressionMethod.Default,
-                                ref _features, LibraryFeature.CompressXz);
-                        }
                     }
 
                     #endregion

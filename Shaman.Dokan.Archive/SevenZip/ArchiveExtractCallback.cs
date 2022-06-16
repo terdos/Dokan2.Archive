@@ -461,7 +461,7 @@ namespace SevenZip
         /// <inheritdoc />
         public int CryptoGetTextPassword(out string password)
         {
-            password = Password;
+            password = !string.IsNullOrEmpty(Password) ? Password : Shaman.Dokan.SevenZipProgram.InputPassword();
             return 0;
         }
 
@@ -542,6 +542,11 @@ namespace SevenZip
             }
 
             return string.Join(new string(Path.DirectorySeparatorChar, 1), splitFileName.ToArray());
+        }
+
+        internal void StopStream()
+        {
+            _fileStream.ResultCode = _fakeStream.ResultCode = -88;
         }
     }
 #endif

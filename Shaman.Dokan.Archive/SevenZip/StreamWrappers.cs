@@ -164,6 +164,8 @@ namespace SevenZip
     /// </summary>
     internal sealed class OutStreamWrapper : StreamWrapper, ISequentialOutStream, IOutStream
     {
+        public int ResultCode = 0;
+
         /// <summary>
         /// Initializes a new instance of the OutStreamWrapper class
         /// </summary>
@@ -209,7 +211,7 @@ namespace SevenZip
                 Marshal.WriteInt32(processedSize, (int) size);
             }
             OnBytesWritten(new IntEventArgs((int) size));
-            return 0;
+            return ResultCode;
         }
 
         #endregion
@@ -463,6 +465,8 @@ namespace SevenZip
 
     internal sealed class FakeOutStreamWrapper : ISequentialOutStream, IDisposable
     {
+        public int ResultCode = 0;
+
         #region IDisposable Members
 
         public void Dispose()
@@ -488,7 +492,7 @@ namespace SevenZip
             {
                 Marshal.WriteInt32(processedSize, (int) size);
             }
-            return 0;
+            return ResultCode;
         }
 
         #endregion

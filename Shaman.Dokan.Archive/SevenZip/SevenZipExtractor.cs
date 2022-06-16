@@ -43,11 +43,6 @@ namespace SevenZip
         private ReadOnlyCollection<ArchiveProperty> _archiveProperties;
         private ReadOnlyCollection<string> _volumeFileNames;
 
-        /// <summary>
-        /// This is used to lock possible Dispose() calls.
-        /// </summary>
-        private bool _asynchronousDisposeLock;
-
         #region Constructors
 
         /// <summary>
@@ -368,8 +363,6 @@ namespace SevenZip
             {
                 throw new ObjectDisposedException("SevenZipExtractor");
             }
-
-            RecreateInstanceIfNeeded();
         }
 
         #region Core private functions
@@ -403,7 +396,7 @@ namespace SevenZip
             }
             else
             {
-                if (!_fileName.EndsWith(".001", StringComparison.OrdinalIgnoreCase))
+                if (!_fileName.EndsWith(".001", StringComparison.Ordinal))
                 {
                     _archiveStream = new InStreamWrapper(
                         new ArchiveEmulationStreamProxy(new FileStream(
@@ -495,6 +488,8 @@ namespace SevenZip
                     
                     if (_filesCount != 0)
                     {
+                        if (_filesCount > 999)
+                            Console.WriteLine("Parsing {0} files in the archive ...", _filesCount);
                         var data = new PropVariant();
                         
                         try
@@ -792,11 +787,6 @@ namespace SevenZip
         /// </summary>
         public void Dispose()
         {
-            if (_asynchronousDisposeLock)
-            {
-                throw new InvalidOperationException("SevenZipExtractor instance must not be disposed while making an asynchronous method call.");
-            }
-
             if (!_disposed)
             {                
                 CommonDispose();
@@ -895,7 +885,7 @@ namespace SevenZip
             get
             {
                 DisposedCheck();
-                InitArchiveFileData(true);
+                InitArchiveFileData(false);
 
                 return _archiveFileInfoCollection;
             }
@@ -909,7 +899,7 @@ namespace SevenZip
             get
             {
                 DisposedCheck();
-                InitArchiveFileData(true);
+                InitArchiveFileData(false);
 
                 return _archiveProperties;
             }
@@ -926,7 +916,7 @@ namespace SevenZip
             get
             {
                 DisposedCheck();
-                InitArchiveFileData(true);
+                InitArchiveFileData(false);
                 var fileNames = new List<string>(_archiveFileData.Count);
 
                 fileNames.AddRange(_archiveFileData.Select(afi => afi.FileName));
@@ -943,7 +933,7 @@ namespace SevenZip
             get
             {
                 DisposedCheck();
-                InitArchiveFileData(true);
+                InitArchiveFileData(false);
 
                 return _volumeFileNames;
             }           
@@ -1391,17 +1381,6 @@ namespace SevenZip
         
         #endregion
 
-        public bool TrySetPassword(string newPassword)
-        {
-            if (!string.IsNullOrEmpty(Password) && Password != newPassword) { return false; }
-            Password = string.IsNullOrEmpty(Password) ? newPassword : Password;
-            var file = this.ArchiveFileData.FirstOrDefault(i => i.Size > 0 && !i.IsDirectory);
-            if (file != null)
-            {
-
-            }
-            return true;
-        }
 #endif
 
         #region LZMA SDK functions
@@ -1474,5 +1453,32 @@ namespace SevenZip
         }
 
         #endregion
+
+        public bool TryDecrypt()
+        {
+            DisposedCheck();
+            ClearExceptions();
+            var entry = ArchiveFileData.FirstOrDefault(i => i.Size > 0 && !i.IsDirectory);
+            if (entry == null)
+                return true;
+            var index = (uint)entry.Index;
+            var indexes = new[] { index };
+            if (_isSolid.Value && !entry.Method.Equals("Copy", StringComparison.InvariantCultureIgnoreCase))
+                indexes = SolidIndexes(indexes);
+
+            using (var aec = GetArchiveExtractCallback(Stream.Null, index, indexes.Length))
+                try
+                {
+                    aec.StopStream();
+                    var res = _archive.Extract(indexes, (uint)indexes.Length, 0, aec);
+                    if (aec.HasExceptions || res != 0 && res != -88)
+                        return false;
+                }
+                finally
+                {
+                    FreeArchiveExtractCallback(aec);
+                }
+            return true;
+        }
     }
 }

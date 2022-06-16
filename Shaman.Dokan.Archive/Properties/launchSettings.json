@@ -2,7 +2,7 @@
   "profiles": {
     "Shaman.Dokan.Archive": {
       "commandName": "Project",
-      "commandLineArgs": "R:/working/2.7z S: -p test"
+      "commandLineArgs": "R:/working/pass.7z s: -p test"
     }
   }
 }
