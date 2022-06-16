@@ -11,6 +11,7 @@ using System.Globalization;
 using FileAccess = DokanNet.FileAccess;
 using System.Diagnostics;
 using System.Threading;
+using SevenZip;
 
 namespace Shaman.Dokan
 {
@@ -329,6 +330,7 @@ namespace Shaman.Dokan
         {
             public T Info;
             public Dictionary<string, FsNode<T>> Children;
+
         }
 
         protected static FsNode<T> GetNode<T>(FsNode<T> root, string path, out string baseName)
@@ -343,26 +345,27 @@ namespace Shaman.Dokan
             return current;
         }
 
-        protected static FsNode<T> CreateTree<T>(IEnumerable<T> allfiles, Func<T, string> getPath, Func<T, bool> isDirectory = null)
+        protected static FsNode<T> CreateTree<T>(IEnumerable<T> allfiles, Func<T, string> getPath, Func<T, bool> isDirectory
+            , Func<FsNode<T>> NewDirectory)
         {
             var dict = new Dictionary<string, FsNode<T>>(StringComparer.Ordinal);
 
-            var root = new FsNode<T>() { Children = new Dictionary<string, FsNode<T>>() };
+            var root = NewDirectory();
             dict[string.Empty] = root;
             foreach (var file in allfiles)
             {
                 string name;
                 var path = getPath(file);
 
-                var directory = GetDirectory(path, dict, out name);
+                var directory = GetDirectory(path, dict, out name, NewDirectory);
 
                 FsNode<T> f;
 
-                if (isDirectory != null && isDirectory(file))
+                if (isDirectory(file))
                 {
                     if (!dict.TryGetValue(path, out f))
                     {
-                        f = new FsNode<T>() { Children = new Dictionary<string, FsNode<T>>() };
+                        f = NewDirectory();
                         directory.Children[name] = f;
                         dict[path] = f;
                     }
@@ -372,12 +375,17 @@ namespace Shaman.Dokan
                     f = new FsNode<T>();
                     directory.Children[name] = f;
                 }
+                if (directory == root)
+                {
+                    Debug.WriteLine("test");
+                }
                 f.Info = file;
             }
             return root;
         }
 
-        private static FsNode<T> GetDirectory<T>(string path, Dictionary<string, FsNode<T>> dict, out string filename)
+        private static FsNode<T> GetDirectory<T>(string path, Dictionary<string, FsNode<T>> dict, out string filename
+            , Func<FsNode<T>> NewDirectory)
         {
             var lastSlash = path.LastIndexOf('\\');
             if (lastSlash == -1) lastSlash = 0;
@@ -388,8 +396,8 @@ namespace Shaman.Dokan
             if (!dict.TryGetValue(directoryPath, out var directory))
             {
                 string currname;
-                var parent = GetDirectory(directoryPath, dict, out currname);
-                directory = new FsNode<T>() { Children = new Dictionary<string, FsNode<T>>() };
+                var parent = GetDirectory(directoryPath, dict, out currname, NewDirectory);
+                directory = NewDirectory();
                 if (currname.Length == 2 && currname[1] == ':')
                     currname = currname[0].ToString();
                 parent.Children[currname] = directory;
@@ -397,36 +405,6 @@ namespace Shaman.Dokan
             }
 
             return directory;
-        }
-
-        public static void ForEachFile<T>(FsNode<T> root, Action<T> callback)
-        {
-            if (root.Children == null)
-            {
-                callback(root.Info);
-                return;
-            }
-            var top = root.Children.GetEnumerator();
-            var stack = new Stack<Dictionary<string, FsNode<T>>.Enumerator>();
-            stack.Push(top);
-            while (stack.Count > 0)
-            {
-                top = stack.Pop();
-                while (top.MoveNext())
-                {
-                    var next = top.Current.Value;
-                    if (next.Children != null)
-                    {
-                        if (next.Children.Count > 0)
-                        {
-                            stack.Push(top);
-                            top = next.Children.GetEnumerator();
-                        }
-                    }
-                    else if (next.Info != null)
-                        callback(next.Info);
-                }
-            }
         }
     }
 }

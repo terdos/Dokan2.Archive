@@ -10,6 +10,8 @@ namespace Shaman.Dokan
 {
     class SevenZipProgram
     {
+        delegate int ExtractArg(string argName, out string value);
+
         private static string _password = null;
         private static bool _hasReadPW = false;
 
@@ -17,17 +19,24 @@ namespace Shaman.Dokan
         {
             if (args.Length == 0)
             {
-                Console.WriteLine("Usage: ArchiveFs.exe [-ovd] <archive-file> Drive: [root-folder] [-p [password]]");
+                Console.WriteLine("Usage: ArchiveFs.exe [-ovd] <archive-file> Drive: [root-folder] [-l label] [-p [password]]");
             }
-            var passwordIndex = Array.FindIndex(args, i => i == "-p");
-            if (passwordIndex >= 0)
+            ExtractArg extractArg = (string argName, out string value) =>
             {
-                if (passwordIndex < args.Length - 1)
+                var index = Array.FindIndex(args, i => i == argName);
+                value = null;
+                if (index < 0) { }
+                else if (index < args.Length - 1)
                 {
-                    _password = args[passwordIndex + 1];
-                    args = args.Take(passwordIndex).Concat(args.Skip(passwordIndex + 2)).ToArray();
+                    value = args[index + 1];
+                    args = args.Take(index).Concat(args.Skip(index + 2)).ToArray();
                 }
-            }
+                else
+                    args = args.Take(index).ToArray();
+                return index;
+            };
+            var labelIndex = extractArg("-l", out var labelName);
+            var passwordIndex = extractArg("-p", out _password);
             var opts = " " + string.Join(" ", args.Where(i => i[0] == '-'));
             args = args.Where(i => i[0] != '-').ToArray();
             var file = args.FirstOrDefault();
@@ -59,7 +68,7 @@ namespace Shaman.Dokan
 
             if (file.Length > 3 && file[0] == '\\' && file[1] != '\\' && !File.Exists(file))
             {
-                var prefix = new[] { @"\cygdrive\", @"\mnt\", @"\\" }.First(i => file.StartsWith(i));
+                var prefix = new[] { @"\cygdrive\", @"\mnt\", @"\" }.First(i => file.StartsWith(i));
                 var file2 = file.Length > prefix.Length + 2 ? file.Substring(prefix.Length, 2).ToUpper() : "  ";
                 if (file2[1] == '\\' && file2[0] >= 'A' && file2[0] <= 'Z')
                 {
@@ -103,10 +112,16 @@ namespace Shaman.Dokan
             if (fs.extractor.IsSolid)
                 Console.WriteLine("Warning: mounting performance of solid archives is very poor!");
 
+            bool doesOpen = opts.Contains(" -o") || opts.Contains(" --open");
+            if (!string.IsNullOrWhiteSpace(labelName))
+                fs.VolumeLabel = labelName.Trim();
             fs.OnMount = (drive) =>
             {
                 if (drive != null)
+                {
                     Console.WriteLine("  Has mounted as {0} .", drive.EndsWith("\\") ? drive : drive + "\\");
+                    Process.Start(isDrive ? mountPoint.ToUpper() + ":\\" : mountPoint);
+                }
                 else
                     Console.In.Close();
             };
@@ -126,8 +141,6 @@ namespace Shaman.Dokan
                     });
                     using (var instance = builder.Build(fs))
                     {
-                        if (opts.Contains(" -o") || opts.Contains(" --open"))
-                            Process.Start(isDrive ? mountPoint.ToUpper() + ":\\" : mountPoint);
                         builder = null;
                         opts = null;
                         while (Console.ReadLine() != null) { }

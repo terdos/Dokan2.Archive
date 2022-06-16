@@ -489,7 +489,7 @@ namespace SevenZip
                     if (_filesCount != 0)
                     {
                         if (_filesCount > 999)
-                            Console.WriteLine("Parsing {0} files in the archive ...", _filesCount);
+                            Console.WriteLine("  Parsing {0} files in the archive ...", _filesCount);
                         var data = new PropVariant();
                         
                         try

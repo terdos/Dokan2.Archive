@@ -7,6 +7,8 @@
     <PublicSign Condition=" '$(OS)' != 'Windows_NT' ">true</PublicSign>
     <Prefer32Bit>true</Prefer32Bit>
     <Platforms>x64</Platforms>
+    <PackageId>Shaman.Dokan.Archive</PackageId>
+    <AssemblyName>Dokan2.Archive</AssemblyName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <DefineConstants>UNMANAGED</DefineConstants>

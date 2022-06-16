@@ -17,18 +17,13 @@ namespace Shaman.Dokan
         private FsNode<ArchiveFileInfo> root;
         private ulong TotalSize;
         public bool Encrypted { get; private set; } = false;
+        public string VolumeLabel;
         public SevenZipFs(string path)
         {
             extractor = new SevenZipExtractor(path);
             TotalSize = 0;
-            root = CreateTree(extractor.ArchiveFileData, x => x.FileName, x =>
-            {
-                if (x.IsDirectory) return true;
-                TotalSize += x.Size;
-                Encrypted = Encrypted || x.Encrypted;
-                return false;
-            });
-            TotalSize = Math.Max(TotalSize, 1024);
+            root = CreateTree(extractor.ArchiveFileData, x => x.FileName, x => x.IsDirectory, NewDirectory);
+            CollectInfo();
             cache = new MemoryStreamCache<FsNode<ArchiveFileInfo>>((item, stream) =>
             {
                 lock (readerLock)
@@ -96,7 +91,8 @@ namespace Shaman.Dokan
 
         public override NtStatus GetVolumeInformation(out string volumeLabel, out FileSystemFeatures features, out string fileSystemName, out uint maximumComponentLength, IDokanFileInfo info)
         {
-            fileSystemName = volumeLabel = "ArchiveFs";
+            fileSystemName = "ArchiveFs";
+            volumeLabel = VolumeLabel ?? fileSystemName;
             features = FileSystemFeatures.CasePreservedNames | FileSystemFeatures.ReadOnlyVolume | FileSystemFeatures.UnicodeOnDisk | FileSystemFeatures.VolumeIsCompressed;
             maximumComponentLength = 256;
             return NtStatus.Success;
@@ -112,7 +108,7 @@ namespace Shaman.Dokan
             var item = GetFile(fileName);
             if (item == null) return null;
 
-            if (item == root || IsDirectory(item.Info.Attributes))
+            if (item.Info.IsDirectory)
             {
                 if (item.Children == null) return new FileInformation[] { };
                 if (searchPattern == "*")
@@ -129,7 +125,7 @@ namespace Shaman.Dokan
         {
             return new FileInformation()
             {
-                Attributes = item == root ? FileAttributes.Directory : (FileAttributes)item.Info.Attributes,
+                Attributes = (FileAttributes)item.Info.Attributes,
                 CreationTime = item.Info.CreationTime,
                 FileName = name,
                 LastAccessTime = item.Info.LastAccessTime,
@@ -151,6 +147,17 @@ namespace Shaman.Dokan
             return size >= 0 ? NtStatus.Success : NtStatus.NotImplemented;
         }
 
+        public FsNode<ArchiveFileInfo> NewDirectory()
+        {
+            var item = new FsNode<ArchiveFileInfo>()
+            {
+                Children = new Dictionary<string, FsNode<ArchiveFileInfo>>()
+            };
+            item.Info.IsDirectory = true;
+            item.Info.Attributes = (uint)FileAttributes.Directory;
+            return item;
+        }
+
         public bool SetRoot(string newRootFolder)
         {
             if (newRootFolder == ":auto")
@@ -166,20 +173,85 @@ namespace Shaman.Dokan
             {
                 root = item;
                 TotalSize = 0;
-                ForEachFile(root, info => TotalSize += info.Size);
+                ForEach(root, info => TotalSize += info.Size);
             }
             else if (name != null)
             {
-                var newRoot = new FsNode<ArchiveFileInfo>()
-                {
-                    Children = new Dictionary<string, FsNode<ArchiveFileInfo>>() { }
-                };
+                var newRoot = NewDirectory();
                 newRoot.Children[name] = item;
                 root = newRoot;
                 TotalSize = item.Info.Size;
             }
             TotalSize = Math.Max(TotalSize, 1024);
             return true;
+        }
+
+        public static void ForEach(FsNode<ArchiveFileInfo> root, Action<ArchiveFileInfo> OnFile)
+        {
+            if (!root.Info.IsDirectory)
+            {
+                OnFile(root.Info);
+                return;
+            }
+            var top = root.Children.GetEnumerator();
+            var stack = new Stack<Dictionary<string, FsNode<ArchiveFileInfo>>.Enumerator>();
+            stack.Push(top);
+            while (stack.Count > 0)
+            {
+                top = stack.Pop();
+                while (top.MoveNext())
+                {
+                    var next = top.Current.Value;
+                    if (next.Info.IsDirectory)
+                    {
+                        if (next.Children.Count > 0)
+                        {
+                            stack.Push(top);
+                            top = next.Children.GetEnumerator();
+                        }
+                    }
+                    else if (next.Info != null)
+                        OnFile(next.Info);
+                }
+            }
+        }
+
+        public void CollectInfo()
+        {
+            ulong total = 0;
+            bool encrypt = false;
+            DateTime Now = DateTime.Now, MaxDate = new DateTime(2099, 12, 31);
+            Func<FsNode<ArchiveFileInfo>, bool> iter = null;
+            iter = (dir) =>
+            {
+                DateTime ctime = MaxDate, mtime = new DateTime(0);
+                bool hasChildren = false;
+                foreach (var item in dir.Children.Values)
+                {
+                    if (item.Info.IsDirectory)
+                    {
+                        if (!iter(item))
+                            continue;
+                    }
+                    else
+                    {
+                        encrypt = encrypt || item.Info.Encrypted;
+                        total += item.Info.Size;
+                    }
+                    ctime = ctime < item.Info.CreationTime ? ctime : item.Info.CreationTime;
+                    mtime = mtime > item.Info.LastWriteTime ? mtime : item.Info.LastWriteTime;
+                    hasChildren = true;
+                }
+                if (hasChildren)
+                {
+                    dir.Info.CreationTime = ctime;
+                    dir.Info.LastWriteTime = dir.Info.LastAccessTime = mtime;
+                }
+                return hasChildren;
+            };
+            iter(root);
+            Encrypted = encrypt;
+            TotalSize = Math.Max(total, 1024);
         }
     }
 }
