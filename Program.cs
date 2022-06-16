@@ -96,15 +96,17 @@ namespace Shaman.Dokan
                 Console.Error.WriteLine("Error: Root folder is not found in archive!");
                 return 4;
             }
-            if (!fs.Encrypted && !string.IsNullOrEmpty(_password))
+            if (!fs.Encrypted && !string.IsNullOrEmpty(_password) && !_hasReadPW)
                 Console.WriteLine("Warning: archive is not encrypted!");
             _password = null;
-            Console.WriteLine("Has loaded {0}", file);
+            Console.WriteLine("  Has loaded {0}", file);
+            if (fs.extractor.IsSolid)
+                Console.WriteLine("Warning: mounting performance of solid archives is very poor!");
 
             fs.OnMount = (drive) =>
             {
                 if (drive != null)
-                    Console.WriteLine("Has mounted as {0} .", drive.EndsWith("\\") ? drive : drive + "\\");
+                    Console.WriteLine("  Has mounted as {0} .", drive.EndsWith("\\") ? drive : drive + "\\");
                 else
                     Console.In.Close();
             };
