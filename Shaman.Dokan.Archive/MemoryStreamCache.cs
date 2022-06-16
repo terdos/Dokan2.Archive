@@ -55,6 +55,10 @@ namespace Shaman.Dokan
 
         public long? TryGetLength(TKey item)
         {
+            if (item is FileSystemBase.FsNode<SevenZip.ArchiveFileInfo> archiveFile)
+            {
+                return Math.Max((long)archiveFile.Info.Size, 0);
+            }
             lock (streams)
             {
                 if (streams.TryGetValue(item, out var manager))
@@ -70,6 +74,10 @@ namespace Shaman.Dokan
 
         public long GetLength(TKey item)
         {
+            if (item is FileSystemBase.FsNode<SevenZip.ArchiveFileInfo> archiveFile)
+            {
+                return Math.Max((long)archiveFile.Info.Size, 0);
+            }
             lock (streams)
             {
                 using (var s = OpenStream(item, null))

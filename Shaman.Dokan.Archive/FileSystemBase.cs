@@ -324,7 +324,7 @@ namespace Shaman.Dokan
             searchPattern = searchPattern.Replace('<', '*');
         }
 
-        protected class FsNode<T>
+        public class FsNode<T>
         {
             public object Tag { get; set; }
             public T Info { get; set; }
@@ -348,7 +348,6 @@ namespace Shaman.Dokan
             }
             public Func<List<FsNode<T>>> GetChildrenDelegate { get; set; }
             public string Name { get; set; }
-            public string FullName { get; set; }
 
             public override string ToString()
             {
@@ -364,7 +363,7 @@ namespace Shaman.Dokan
             foreach (var item in components)
             {
                 if (current.Children == null) return null;
-                current = current.Children.FirstOrDefault(x => x.Name.Equals(item, StringComparison.OrdinalIgnoreCase));
+                current = current.Children.FirstOrDefault(x => x.Name.Equals(item, StringComparison.Ordinal));
                 if (current == null) return null;
             }
             return current;
@@ -407,7 +406,6 @@ namespace Shaman.Dokan
 
                 f.Name = name;
                 f.Info = file;
-                f.FullName = path;
                 if (postprocess != null) postprocess(f);
 
             }
