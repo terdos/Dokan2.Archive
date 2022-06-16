@@ -55,7 +55,7 @@ namespace Shaman.Dokan
 
         public long? TryGetLength(TKey item)
         {
-            if (item is FileSystemBase.FsNode<SevenZip.ArchiveFileInfo> archiveFile)
+            if (item is FileSystemBase.FsNode archiveFile)
             {
                 return Math.Max((long)archiveFile.Info.Size, 0);
             }
@@ -70,11 +70,11 @@ namespace Shaman.Dokan
         }
 
 
-        private byte[] sharedGarbageBuffer = new byte[32 * 1024];
+        private static byte[] sharedGarbageBuffer = new byte[32 * 1024];
 
         public long GetLength(TKey item)
         {
-            if (item is FileSystemBase.FsNode<SevenZip.ArchiveFileInfo> archiveFile)
+            if (item is FileSystemBase.FsNode archiveFile)
             {
                 return Math.Max((long)archiveFile.Info.Size, 0);
             }

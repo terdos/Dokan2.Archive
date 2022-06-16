@@ -18,7 +18,7 @@
     /// The structure to fix x64 and x32 variant size mismatch.
     /// </summary>
     [StructLayout(LayoutKind.Sequential)]
-    internal struct PropArray
+    public struct PropArray
     {
         readonly uint _cElems;
         readonly IntPtr _pElems;
@@ -28,7 +28,7 @@
     /// COM VARIANT structure with special interface routines.
     /// </summary>
     [StructLayout(LayoutKind.Explicit)]
-    internal struct PropVariant
+    public struct PropVariant
     {
         [FieldOffset(0)] private ushort _vt;
 
@@ -141,33 +141,28 @@
                         {
                             return DateTime.MinValue;
                         }
+                    case VarEnum.VT_UI8:
+                        return UInt64Value;
+                    case VarEnum.VT_UI4:
+                        return UInt32Value;
+                    case VarEnum.VT_I8:
+                        return Int64Value;
+                    case VarEnum.VT_I4:
+                        return Int32Value;
                     default:
                         var propHandle = GCHandle.Alloc(this, GCHandleType.Pinned);
-                        
                         try
                         {
                             return Marshal.GetObjectForNativeVariant(propHandle.AddrOfPinnedObject());
                         }
                         catch (NotSupportedException)
                         {
-                            switch (VarType)
-                            {
-                                case VarEnum.VT_UI8:
-                                    return UInt64Value;
-                                case VarEnum.VT_UI4:
-                                    return UInt32Value;
-                                case VarEnum.VT_I8:
-                                    return Int64Value;
-                                case VarEnum.VT_I4:
-                                    return Int32Value;
-                                default:
-                                    return 0;
-                            }
                         }
                         finally
                         {
                             propHandle.Free();
                         }
+                        return 0;
                 }
             }
         }
@@ -246,7 +241,7 @@
     /// <summary>
     /// Stores file extraction modes.
     /// </summary>
-    internal enum AskMode
+    public enum AskMode
     {
         /// <summary>
         /// Extraction mode
@@ -312,7 +307,7 @@
     /// <summary>
     /// Codes of item properties
     /// </summary>
-    internal enum ItemPropId : uint
+    public enum ItemPropId : uint
     {
         /// <summary>
         /// No property
@@ -579,7 +574,7 @@
     /// <summary>
     /// PropId string names dictionary wrapper.
     /// </summary>
-    internal static class PropIdToName
+    public static class PropIdToName
     {
         /// <summary>
         /// PropId string names
@@ -665,7 +660,7 @@
     [ComImport]
     [Guid("23170F69-40C1-278A-0000-000600100000")]
     [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    internal interface IArchiveOpenCallback
+    public interface IArchiveOpenCallback
     {
         // ref ulong replaced with IntPtr because handlers often pass null value
         // read actual value with Marshal.ReadInt64
@@ -694,7 +689,7 @@
     [ComImport]
     [Guid("23170F69-40C1-278A-0000-000500100000")]
     [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    internal interface ICryptoGetTextPassword
+    public interface ICryptoGetTextPassword
     {
         /// <summary>
         /// Gets password for the archive
@@ -712,7 +707,7 @@
     [ComImport]
     [Guid("23170F69-40C1-278A-0000-000500110000")]
     [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    internal interface ICryptoGetTextPassword2
+    public interface ICryptoGetTextPassword2
     {
         /// <summary>
         /// Sets password for the archive
@@ -732,7 +727,7 @@
     [ComImport]
     [Guid("23170F69-40C1-278A-0000-000600200000")]
     [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    internal interface IArchiveExtractCallback
+    public interface IArchiveExtractCallback
     {
         /// <summary>
         /// Gives the size of the unpacked archive files
@@ -778,7 +773,7 @@
     [ComImport]
     [Guid("23170F69-40C1-278A-0000-000600800000")]
     [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    internal interface IArchiveUpdateCallback
+    public interface IArchiveUpdateCallback
     {
         /// <summary>
         /// Gives the size of the unpacked archive files.
@@ -787,7 +782,7 @@
         void SetTotal(ulong total);
 
         /// <summary>
-        /// SetCompleted 7-zip internal function.
+        /// SetCompleted 7-zip public function.
         /// </summary>
         /// <param name="completeValue"></param>
         void SetCompleted([In] ref ulong completeValue);
@@ -833,7 +828,7 @@
         void SetOperationResult(OperationResult operationResult);
 
         /// <summary>
-        /// EnumProperties 7-zip internal function.
+        /// EnumProperties 7-zip public function.
         /// </summary>
         /// <param name="enumerator">The enumerator pointer.</param>
         /// <returns></returns>
@@ -846,7 +841,7 @@
     [ComImport]
     [Guid("23170F69-40C1-278A-0000-000600300000")]
     [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    internal interface IArchiveOpenVolumeCallback
+    public interface IArchiveOpenVolumeCallback
     {
         /// <summary>
         /// Gets the archive property data.
@@ -875,7 +870,7 @@
     [ComImport]
     [Guid("23170F69-40C1-278A-0000-000300010000")]
     [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    internal interface ISequentialInStream
+    public interface ISequentialInStream
     {
         /// <summary>
         /// Writes data to 7-zip packer
@@ -899,7 +894,7 @@
     [ComImport]
     [Guid("23170F69-40C1-278A-0000-000300020000")]
     [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    internal interface ISequentialOutStream
+    public interface ISequentialOutStream
     {
         /// <summary>
         /// Writes data to unpacked file stream
@@ -927,7 +922,7 @@
     [ComImport]
     [Guid("23170F69-40C1-278A-0000-000300030000")]
     [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    internal interface IInStream
+    public interface IInStream
     {
         /// <summary>
         /// Read routine
@@ -955,7 +950,7 @@
     [ComImport]
     [Guid("23170F69-40C1-278A-0000-000300040000")]
     [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    internal interface IOutStream
+    public interface IOutStream
     {
         /// <summary>
         /// Write routine
@@ -994,7 +989,7 @@
     [ComImport]  
 	[Guid("23170F69-40C1-278A-0000-000600600000")]
     [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]	
-    internal interface IInArchive
+    public interface IInArchive
     {
         /// <summary>
         /// Opens archive for reading.
@@ -1100,7 +1095,7 @@
     [ComImport]
     [Guid("23170F69-40C1-278A-0000-000600A00000")]
     [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    internal interface IOutArchive
+    public interface IOutArchive
     {
         /// <summary>
         /// Updates archive items
@@ -1128,7 +1123,7 @@
     [ComImport]
     [Guid("23170F69-40C1-278A-0000-000600030000")]
     [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    internal interface ISetProperties
+    public interface ISetProperties
     {
         /// <summary>
         /// Sets the archive properties

@@ -41,11 +41,6 @@ namespace SevenZip
         public DateTime CreationTime;
 
         /// <summary>
-        /// Gets or sets file name
-        /// </summary>
-        public string FileName;
-
-        /// <summary>
         /// Gets or sets CRC checksum of the file.
         /// </summary>
         // [CLSCompliant(false)]
@@ -57,14 +52,14 @@ namespace SevenZip
         public bool IsDirectory => (Attributes & (uint)System.IO.FileAttributes.Directory) != 0;
 
         /// <summary>
-        /// Compression method for the file.
-        /// </summary>
-        // public bool IsCopy => (Flags & 1) != 0;
-
-        /// <summary>
         /// Gets or sets being encrypted.
         /// </summary>
-        public bool Encrypted => (Flags & 2) != 0;
+        public bool Encrypted => (Flags & 1) != 0;
+
+        /// <summary>
+        /// Compression method for the file.
+        /// </summary>
+        public bool IsCopy => (Flags & 2) != 0;
 
         /// <summary>
         /// Determines whether the specified System.Object is equal to the current ArchiveFileInfo.

@@ -326,13 +326,23 @@ namespace Shaman.Dokan
             searchPattern = searchPattern.Replace('<', '*');
         }
 
-        public class FsNode<T>
+        public sealed class FsNode
         {
-            public T Info;
-            public SortedDictionary<string, FsNode<T>> Children;
+            public ArchiveFileInfo Info;
+            public Dictionary<string, FsNode> Children;
         }
 
-        protected static FsNode<T> GetNode<T>(FsNode<T> root, string path, out string baseName)
+        public static FsNode NewDirectory()
+        {
+            var item = new FsNode()
+            {
+                Children = new Dictionary<string, FsNode>()
+            };
+            item.Info.Attributes = (uint)FileAttributes.Directory;
+            return item;
+        }
+
+        protected static FsNode GetNode(FsNode root, string path, out string baseName)
         {
             var components = path.Split(new char[] { '\\' }, StringSplitOptions.RemoveEmptyEntries);
 
@@ -346,68 +356,73 @@ namespace Shaman.Dokan
 
         //private static Func<string, string> CopyStr = string.Copy;
         private static Func<string, string> CopyStr = s => s;
+        protected delegate string TestFile<T> (in T file, out bool isDirectory);
 
-        protected static FsNode<T> CreateTree<T>(IEnumerable<T> allfiles, Func<T, string> getPath, Func<T, bool> isDirectory
-            , Func<FsNode<T>> NewDirectory)
+        protected static FsNode CreateTree(SevenZipExtractor extractor)
         {
+            var iter = extractor.ArchiveFileData;
             GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, false, true);
-            var dict = new Dictionary<string, FsNode<T>>(StringComparer.Ordinal);
+            var dict = new Dictionary<string, FsNode>(StringComparer.Ordinal);
 
             var root = NewDirectory();
             dict[string.Empty] = root;
-            foreach (var file in allfiles)
+            var prop = new PropVariant();
+            try
             {
-                string name;
-                var path = getPath(file);
-
-                var directory = GetDirectory(path, dict, out name, NewDirectory);
-
-                FsNode<T> f;
-
-                if (isDirectory(file))
+                for (uint i = 0, end = extractor.FilesCount; i < end; i++)
                 {
-                    if (!dict.TryGetValue(path, out f))
+                    extractor._archive.GetProperty(i, ItemPropId.Attributes, ref prop);
+                    var attrs = SevenZip.NativeMethods.SafeCast<uint>(ref prop, 0);
+                    extractor._archive.GetProperty(i, ItemPropId.Path, ref prop);
+                    var path = SevenZip.NativeMethods.SafeCast(ref prop, "[no name]");
+
+                    var directory = GetDirectory(path, dict, out var name);
+                    FsNode f;
+                    if ((attrs & (uint)FileAttributes.Directory) != 0)
                     {
-                        f = NewDirectory();
-                        directory.Children[CopyStr(name)] = f;
-                        dict[path] = f;
+                        if (!dict.TryGetValue(path, out f))
+                        {
+                            f = NewDirectory();
+                            directory.Children[name] = f;
+                            dict[path] = f;
+                        }
                     }
-                    f.Info = file;
+                    else
+                    {
+                        f = new FsNode();
+                        directory.Children[name] = f;
+                    }
+                    iter(i, ref f.Info);
+                    f.Info.Attributes = attrs | (uint) FileAttributes.ReadOnly;
                 }
-                else
-                {
-                    f = new FsNode<T>() { Info = file };
-                    directory.Children[CopyStr(name)] = f;
-                }
-                if (directory == root)
-                {
-                    Debug.WriteLine("test");
-                }
+            }
+            catch (InvalidCastException)
+            {
+                extractor.ThrowException(null, new SevenZipArchiveException("probably archive is corrupted."));
             }
             GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, false, true);
             return root;
         }
 
-        private static FsNode<T> GetDirectory<T>(string path, Dictionary<string, FsNode<T>> dict, out string filename
-            , Func<FsNode<T>> NewDirectory)
+        private static FsNode GetDirectory(string path, Dictionary<string, FsNode> dict, out string filename)
         {
             var lastSlash = path.LastIndexOf('\\');
             if (lastSlash == -1) lastSlash = 0;
             var directoryPath = path.Substring(0, lastSlash);
-            filename = lastSlash != 0 ? path.Substring(lastSlash + 1) : path;
+            filename = lastSlash != 0 ? string.Copy(path.Substring(lastSlash + 1)) : path;
+            //filename = lastSlash != 0 ? path.Substring(lastSlash + 1) : path;
 
 
             if (!dict.TryGetValue(directoryPath, out var directory))
             {
                 string currname;
-                var parent = GetDirectory(directoryPath, dict, out currname, NewDirectory);
+                var parent = GetDirectory(directoryPath, dict, out currname);
                 directory = NewDirectory();
                 if (currname.Length == 2 && currname[1] == ':')
                     currname = currname[0].ToString();
-                parent.Children[CopyStr(currname)] = directory;
+                parent.Children[currname] = directory;
                 dict[directoryPath] = directory;
             }
-
             return directory;
         }
     }

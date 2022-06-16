@@ -14,7 +14,7 @@ namespace Shaman.Dokan
     {
 
         public SevenZipExtractor extractor;
-        private FsNode<ArchiveFileInfo> root;
+        private FsNode root;
         private ulong TotalSize;
         public bool Encrypted { get; private set; } = false;
         public string RootFolder { get; private set; }
@@ -23,19 +23,13 @@ namespace Shaman.Dokan
         {
             extractor = new SevenZipExtractor(path);
             TotalSize = 0;
-            root = CreateTree(extractor.ArchiveFileData, x =>
-            {
-                var name = x.FileName;
-                x.FileName = null;
-                return name;
-            }, x => x.IsDirectory, NewDirectory);
-            extractor.ArchiveFileData = null;
+            root = CreateTree(extractor);
             CollectInfo();
-            cache = new MemoryStreamCache<FsNode<ArchiveFileInfo>>((item, stream) =>
+            cache = new MemoryStreamCache<FsNode>((item, stream) =>
             {
                 lock (readerLock)
                 {
-                    extractor.ExtractFile(item.Info.Index, stream);
+                    extractor.ExtractFile(item, stream);
                 }
             });
         }
@@ -78,7 +72,7 @@ namespace Shaman.Dokan
         }
 
 
-        private MemoryStreamCache<FsNode<ArchiveFileInfo>> cache;
+        private MemoryStreamCache<FsNode> cache;
         public override NtStatus GetFileInformation(string fileName, out FileInformation fileInfo, IDokanFileInfo info)
         {
             var item = GetNode(root, fileName, out var name);
@@ -93,14 +87,14 @@ namespace Shaman.Dokan
 
         public override NtStatus GetVolumeInformation(out string volumeLabel, out FileSystemFeatures features, out string fileSystemName, out uint maximumComponentLength, IDokanFileInfo info)
         {
-            fileSystemName = "ArchiveFs";
+            fileSystemName = extractor.Format.ToString() + "Fs";
             volumeLabel = VolumeLabel ?? fileSystemName;
             features = FileSystemFeatures.CasePreservedNames | FileSystemFeatures.ReadOnlyVolume | FileSystemFeatures.UnicodeOnDisk | FileSystemFeatures.VolumeIsCompressed;
             maximumComponentLength = 256;
             return NtStatus.Success;
         }
 
-        private FsNode<ArchiveFileInfo> GetFile(string fileName)
+        private FsNode GetFile(string fileName)
         {
             return GetNode(root, fileName, out var _);
         }
@@ -123,7 +117,7 @@ namespace Shaman.Dokan
             return null;
         }
 
-        private FileInformation GetFileInformation(FsNode<ArchiveFileInfo> item, string name)
+        private FileInformation GetFileInformation(FsNode item, string name)
         {
             return new FileInformation()
             {
@@ -147,16 +141,6 @@ namespace Shaman.Dokan
             total = size;
             used = size;
             return size >= 0 ? NtStatus.Success : NtStatus.NotImplemented;
-        }
-
-        public FsNode<ArchiveFileInfo> NewDirectory()
-        {
-            var item = new FsNode<ArchiveFileInfo>()
-            {
-                Children = new SortedDictionary<string, FsNode<ArchiveFileInfo>>()
-            };
-            item.Info.Attributes = (uint)FileAttributes.Directory;
-            return item;
         }
 
         public bool SetRoot(string newRootFolder)
@@ -193,10 +177,10 @@ namespace Shaman.Dokan
             return true;
         }
 
-        public static void ForEach(FsNode<ArchiveFileInfo> root, Action<FsNode<ArchiveFileInfo>> OnFile)
+        public static void ForEach(FsNode root, Action<FsNode> OnFile)
         {
-            IEnumerator<FsNode<ArchiveFileInfo>> top = root.Children.Values.GetEnumerator();
-            var stack = new Stack<IEnumerator<FsNode<ArchiveFileInfo>>>();
+            IEnumerator<FsNode> top = root.Children.Values.GetEnumerator();
+            var stack = new Stack<IEnumerator<FsNode>>();
             stack.Push(top);
             while (stack.Count > 0)
             {
@@ -224,7 +208,7 @@ namespace Shaman.Dokan
             bool encrypt = false;
             ulong nameLen = 0;
             DateTime Now = DateTime.Now, MaxDate = new DateTime(2099, 12, 31);
-            bool iter(FsNode<ArchiveFileInfo> dir)
+            bool iter(FsNode dir)
             {
                 DateTime ctime = MaxDate, mtime = DateTime.MinValue;
                 bool hasChildren = false;
@@ -241,7 +225,6 @@ namespace Shaman.Dokan
                     {
                         encrypt = encrypt || item.Info.Encrypted;
                         total += item.Info.Size;
-                        item.Info.Attributes |= (uint)FileAttributes.ReadOnly;
                     }
                     ctime = ctime < item.Info.CreationTime ? ctime : item.Info.CreationTime;
                     mtime = mtime > item.Info.LastWriteTime ? mtime : item.Info.LastWriteTime;
@@ -262,8 +245,8 @@ namespace Shaman.Dokan
 
         internal bool TryDecrypt()
         {
-            IEnumerator<FsNode<ArchiveFileInfo>> top = root.Children.Values.GetEnumerator();
-            var stack = new Stack<IEnumerator<FsNode<ArchiveFileInfo>>>();
+            IEnumerator<FsNode> top = root.Children.Values.GetEnumerator();
+            var stack = new Stack<IEnumerator<FsNode>>();
             stack.Push(top);
             while (stack.Count > 0)
             {
@@ -280,7 +263,7 @@ namespace Shaman.Dokan
                         }
                     }
                     else if (next.Info.Size > 0)
-                        return extractor.TryDecrypt(next.Info.Index);
+                        return extractor.TryDecrypt(next);
                 }
             }
             return true;
