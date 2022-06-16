@@ -66,8 +66,6 @@ namespace SevenZip
         /// <summary>
         /// 7-zip library features.
         /// </summary>
-        private static LibraryFeature? _features;
-
         private static Dictionary<object, Dictionary<InArchiveFormat, IInArchive>> _inArchives;
         private static Dictionary<object, Dictionary<OutArchiveFormat, IOutArchive>> _outArchives;
         private static int _totalUsers;
@@ -191,87 +189,6 @@ namespace SevenZip
         private static string GetResourceString(string str)
         {
             return Namespace + ".arch." + str;
-        }
-
-        private static bool ExtractionBenchmark(string archiveFileName, Stream outStream, ref LibraryFeature? features, LibraryFeature testedFeature)
-        {
-            var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(GetResourceString(archiveFileName));
-            
-            try
-            {
-                using (var extractor = new SevenZipExtractor(stream))
-                {
-                    extractor.ExtractFile(0, outStream);
-                }
-            }
-            catch (Exception)
-            {
-                return false;
-            }
-
-            features |= testedFeature;
-            return true;
-        }
-
-        public static LibraryFeature CurrentLibraryFeatures
-        {
-            get
-            {
-                lock (_syncRoot)
-                {
-                    if (_features != null && _features.HasValue)
-                    {
-                        return _features.Value;
-                    }
-
-                    _features = LibraryFeature.None;
-
-                    #region Benchmark
-
-                    #region Extraction features
-
-                    using (var outStream = new MemoryStream())
-                    {
-                        ExtractionBenchmark("Test.lzma.7z", outStream, ref _features, LibraryFeature.Extract7z);
-                        ExtractionBenchmark("Test.lzma2.7z", outStream, ref _features, LibraryFeature.Extract7zLZMA2);
-
-                        var i = 0;
-
-                        if (ExtractionBenchmark("Test.bzip2.7z", outStream, ref _features, _features.Value))
-                        {
-                            i++;
-                        }
-
-                        if (ExtractionBenchmark("Test.ppmd.7z", outStream, ref _features, _features.Value))
-                        {
-                            i++;
-                            if (i == 2 && (_features & LibraryFeature.Extract7z) != 0 &&
-                                (_features & LibraryFeature.Extract7zLZMA2) != 0)
-                            {
-                                _features |= LibraryFeature.Extract7zAll;
-                            }
-                        }
-
-                        ExtractionBenchmark("Test.rar", outStream, ref _features, LibraryFeature.ExtractRar);
-                        ExtractionBenchmark("Test.tar", outStream, ref _features, LibraryFeature.ExtractTar);
-                        ExtractionBenchmark("Test.txt.bz2", outStream, ref _features, LibraryFeature.ExtractBzip2);
-                        ExtractionBenchmark("Test.txt.gz", outStream, ref _features, LibraryFeature.ExtractGzip);
-                        ExtractionBenchmark("Test.txt.xz", outStream, ref _features, LibraryFeature.ExtractXz);
-                        ExtractionBenchmark("Test.zip", outStream, ref _features, LibraryFeature.ExtractZip);
-                    }
-
-                    #endregion
-
-                    #endregion
-
-                    if (ModifyCapable && (_features.Value & LibraryFeature.Compress7z) != 0)
-                    {
-                        _features |= LibraryFeature.Modify;
-                    }
-
-                    return _features.Value;
-                }
-            }
         }
 
         /// <summary>
@@ -463,7 +380,6 @@ namespace SevenZip
             }
 
             _libraryFileName = libraryPath;
-            _features = null;
         }
     }
 #endif

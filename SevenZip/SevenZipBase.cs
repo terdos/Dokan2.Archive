@@ -266,12 +266,6 @@ namespace SevenZip
         }
 
         /// <summary>
-        /// Gets the current library features.
-        /// </summary>
-        // [CLSCompliant(false)]
-        public static LibraryFeature CurrentLibraryFeatures => SevenZipLibraryManager.CurrentLibraryFeatures;
-
-        /// <summary>
         /// Determines whether the specified System.Object is equal to the current SevenZipBase.
         /// </summary>
         /// <param name="obj">The System.Object to compare with the current SevenZipBase.</param>

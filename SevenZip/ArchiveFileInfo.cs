@@ -14,65 +14,57 @@ namespace SevenZip
         /// Gets or sets index of the file in the archive file table.
         /// </summary>
         // [CLSCompliant(false)]
-        public int Index { get; set; }
-
-        /// <summary>
-        /// Gets or sets file name
-        /// </summary>
-        public string FileName { get; set; }
-
-        /// <summary>
-        /// Gets or sets the file last write time.
-        /// </summary>
-        public DateTime LastWriteTime { get; set; }
-
-        /// <summary>
-        /// Gets or sets the file creation time.
-        /// </summary>
-        public DateTime CreationTime { get; set; }
-
-        /// <summary>
-        /// Gets or sets the file creation time.
-        /// </summary>
-        public DateTime LastAccessTime { get; set; }
-
-        /// <summary>
-        /// Gets or sets size of the file (unpacked).
-        /// </summary>
-        // [CLSCompliant(false)]
-        public ulong Size { get; set; }
-
-        /// <summary>
-        /// Gets or sets CRC checksum of the file.
-        /// </summary>
-        // [CLSCompliant(false)]
-        public uint Crc { get; set; }
+        public int Index;
 
         /// <summary>
         /// Gets or sets file attributes.
         /// </summary>
         // [CLSCompliant(false)]
-        public uint Attributes { get; set; }
+        public uint Attributes;
+
+        public uint Flags;
+
+        /// <summary>
+        /// Gets or sets size of the file (unpacked).
+        /// </summary>
+        // [CLSCompliant(false)]
+        public ulong Size;
+
+        /// <summary>
+        /// Gets or sets the file last write time.
+        /// </summary>
+        public DateTime LastWriteTime;
+
+        /// <summary>
+        /// Gets or sets the file creation time.
+        /// </summary>
+        public DateTime CreationTime;
+
+        /// <summary>
+        /// Gets or sets file name
+        /// </summary>
+        public string FileName;
+
+        /// <summary>
+        /// Gets or sets CRC checksum of the file.
+        /// </summary>
+        // [CLSCompliant(false)]
+        //public uint Crc;
 
         /// <summary>
         /// Gets or sets being a directory.
         /// </summary>
-        public bool IsDirectory { get; set; }
-
-        /// <summary>
-        /// Gets or sets being encrypted.
-        /// </summary>
-        public bool Encrypted { get; set; }
-
-        /// <summary>
-        /// Gets or sets comment for the file.
-        /// </summary>
-        public string Comment { get; set; }
+        public bool IsDirectory => (Attributes & (uint)System.IO.FileAttributes.Directory) != 0;
 
         /// <summary>
         /// Compression method for the file.
         /// </summary>
-        public string Method { get; set; }
+        // public bool IsCopy => (Flags & 1) != 0;
+
+        /// <summary>
+        /// Gets or sets being encrypted.
+        /// </summary>
+        public bool Encrypted => (Flags & 2) != 0;
 
         /// <summary>
         /// Determines whether the specified System.Object is equal to the current ArchiveFileInfo.
@@ -91,7 +83,7 @@ namespace SevenZip
         /// <returns>true if the specified ArchiveFileInfo is equal to the current ArchiveFileInfo; otherwise, false.</returns>
         public bool Equals(ArchiveFileInfo afi)
         {
-            return afi.Index == Index && afi.FileName == FileName;
+            return afi.Index == Index;
         }
 
         /// <summary>
@@ -100,7 +92,7 @@ namespace SevenZip
         /// <returns> A hash code for the current ArchiveFileInfo.</returns>
         public override int GetHashCode()
         {
-            return FileName.GetHashCode() ^ Index;
+            return Index.GetHashCode();
         }
 
         /// <summary>
@@ -109,7 +101,7 @@ namespace SevenZip
         /// <returns>A System.String that represents the current ArchiveFileInfo.</returns>
         public override string ToString()
         {
-            return "[" + Index.ToString(CultureInfo.CurrentCulture) + "] " + FileName;
+            return "[" + Index.ToString(CultureInfo.CurrentCulture) + "] ";
         }
 
         /// <summary>

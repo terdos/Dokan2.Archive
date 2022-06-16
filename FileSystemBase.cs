@@ -329,8 +329,7 @@ namespace Shaman.Dokan
         public class FsNode<T>
         {
             public T Info;
-            public Dictionary<string, FsNode<T>> Children;
-
+            public SortedDictionary<string, FsNode<T>> Children;
         }
 
         protected static FsNode<T> GetNode<T>(FsNode<T> root, string path, out string baseName)
@@ -345,9 +344,13 @@ namespace Shaman.Dokan
             return current;
         }
 
+        //private static Func<string, string> CopyStr = string.Copy;
+        private static Func<string, string> CopyStr = s => s;
+
         protected static FsNode<T> CreateTree<T>(IEnumerable<T> allfiles, Func<T, string> getPath, Func<T, bool> isDirectory
             , Func<FsNode<T>> NewDirectory)
         {
+            GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, false, true);
             var dict = new Dictionary<string, FsNode<T>>(StringComparer.Ordinal);
 
             var root = NewDirectory();
@@ -366,21 +369,22 @@ namespace Shaman.Dokan
                     if (!dict.TryGetValue(path, out f))
                     {
                         f = NewDirectory();
-                        directory.Children[name] = f;
+                        directory.Children[CopyStr(name)] = f;
                         dict[path] = f;
                     }
+                    f.Info = file;
                 }
                 else
                 {
-                    f = new FsNode<T>();
-                    directory.Children[name] = f;
+                    f = new FsNode<T>() { Info = file };
+                    directory.Children[CopyStr(name)] = f;
                 }
                 if (directory == root)
                 {
                     Debug.WriteLine("test");
                 }
-                f.Info = file;
             }
+            GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, false, true);
             return root;
         }
 
@@ -400,7 +404,7 @@ namespace Shaman.Dokan
                 directory = NewDirectory();
                 if (currname.Length == 2 && currname[1] == ':')
                     currname = currname[0].ToString();
-                parent.Children[currname] = directory;
+                parent.Children[CopyStr(currname)] = directory;
                 dict[directoryPath] = directory;
             }
 

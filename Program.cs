@@ -93,7 +93,7 @@ namespace Shaman.Dokan
             }
             if (fs.Encrypted && !_hasReadPW)
             {
-                if (!fs.extractor.TryDecrypt())
+                if (!fs.TryDecrypt())
                 {
                     Console.Out.Flush();
                     Console.Error.WriteLine("Error: Password is wrong!");
@@ -115,12 +115,23 @@ namespace Shaman.Dokan
             bool doesOpen = opts.Contains(" -o") || opts.Contains(" --open");
             if (!string.IsNullOrWhiteSpace(labelName))
                 fs.VolumeLabel = labelName.Trim();
+            else
+            {
+                var label = fs.VolumeLabel = Path.GetFileNameWithoutExtension(file).Trim();
+                var root = fs.RootFolder;
+                if (!string.IsNullOrEmpty(root) && root.StartsWith(label + "/"))
+                    root = "./" + root.Substring(label.Length + 1);
+                label = !string.IsNullOrEmpty(label) ? $"{label} ({root})" : root;
+                fs.VolumeLabel = label;
+
+            }
             fs.OnMount = (drive) =>
             {
                 if (drive != null)
                 {
                     Console.WriteLine("  Has mounted as {0} .", drive.EndsWith("\\") ? drive : drive + "\\");
-                    Process.Start(isDrive ? mountPoint.ToUpper() + ":\\" : mountPoint);
+                    if (doesOpen)
+                        Process.Start(drive.EndsWith("\\") ? drive : drive + "\\");
                 }
                 else
                     Console.In.Close();
@@ -143,6 +154,7 @@ namespace Shaman.Dokan
                     {
                         builder = null;
                         opts = null;
+                        GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, false, true);
                         while (Console.ReadLine() != null) { }
                         fs.OnMount = null;
                     }
