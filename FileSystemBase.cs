@@ -354,14 +354,16 @@ namespace Shaman.Dokan
             return current;
         }
 
-        //private static Func<string, string> CopyStr = string.Copy;
-        private static Func<string, string> CopyStr = s => s;
         protected delegate string TestFile<T> (in T file, out bool isDirectory);
 
-        protected static FsNode CreateTree(SevenZipExtractor extractor)
+        public static FsNode CreateTree(SevenZipExtractor extractor)
         {
             var iter = extractor.ArchiveFileData;
             GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, false, true);
+            var filesCount = extractor.FilesCount;
+
+            var watch = filesCount > 999 || SevenZipProgram.VerboseOutput
+                ? Stopwatch.StartNew() : null;
             var dict = new Dictionary<string, FsNode>(StringComparer.Ordinal);
 
             var root = NewDirectory();
@@ -369,61 +371,59 @@ namespace Shaman.Dokan
             var prop = new PropVariant();
             try
             {
-                for (uint i = 0, end = extractor.FilesCount; i < end; i++)
+                for (uint i = 0; i < filesCount; i++)
                 {
                     extractor._archive.GetProperty(i, ItemPropId.Attributes, ref prop);
-                    var attrs = SevenZip.NativeMethods.SafeCast<uint>(ref prop, 0);
+                    var attrs = prop.EnsuredUInt;
                     extractor._archive.GetProperty(i, ItemPropId.Path, ref prop);
-                    var path = SevenZip.NativeMethods.SafeCast(ref prop, "[no name]");
-
-                    var directory = GetDirectory(path, dict, out var name);
+                    var dir = prop.ParseAsDirAndName(out var name);
+                    if (!dict.TryGetValue(dir, out var directory))
+                        directory = EnsureDirectory(dir, dict);
                     FsNode f;
                     if ((attrs & (uint)FileAttributes.Directory) != 0)
                     {
-                        if (!dict.TryGetValue(path, out f))
+                        dir = dir + '\\' + name;
+                        if (!dict.TryGetValue(dir, out f))
                         {
                             f = NewDirectory();
                             directory.Children[name] = f;
-                            dict[path] = f;
+                            dict[dir] = f;
                         }
                     }
                     else
                     {
                         f = new FsNode();
-                        directory.Children[name] = f;
+                        //f.Info.Attributes = attrs | (uint)FileAttributes.ReadOnly;
+                        directory.Children[name.Length > 0 ? name : "" + i] = f;
                     }
                     iter(i, ref f.Info);
-                    f.Info.Attributes = attrs | (uint) FileAttributes.ReadOnly;
                 }
             }
             catch (InvalidCastException)
             {
                 extractor.ThrowException(null, new SevenZipArchiveException("probably archive is corrupted."));
             }
+            if (watch != null)
+            {
+                watch.Stop();
+                if (watch.ElapsedMilliseconds >= 300 || SevenZipProgram.VerboseOutput)
+                    Console.WriteLine("  Parsed in {0} ms ...", watch.ElapsedMilliseconds);
+            }
             GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, false, true);
             return root;
         }
 
-        private static FsNode GetDirectory(string path, Dictionary<string, FsNode> dict, out string filename)
+        private static FsNode EnsureDirectory(string path, Dictionary<string, FsNode> dict)
         {
             var lastSlash = path.LastIndexOf('\\');
-            if (lastSlash == -1) lastSlash = 0;
-            var directoryPath = path.Substring(0, lastSlash);
-            filename = lastSlash != 0 ? string.Copy(path.Substring(lastSlash + 1)) : path;
-            //filename = lastSlash != 0 ? path.Substring(lastSlash + 1) : path;
-
-
-            if (!dict.TryGetValue(directoryPath, out var directory))
-            {
-                string currname;
-                var parent = GetDirectory(directoryPath, dict, out currname);
-                directory = NewDirectory();
-                if (currname.Length == 2 && currname[1] == ':')
-                    currname = currname[0].ToString();
-                parent.Children[currname] = directory;
-                dict[directoryPath] = directory;
-            }
-            return directory;
+            string filename = lastSlash >= 0 ? path.Substring(lastSlash + 1) : path;
+            if (filename.Length == 2 && filename[1] == ':')
+                filename = filename[0].ToString();
+            var parentPath = lastSlash >= 0 ? path.Substring(0, lastSlash) : "";
+            if (!dict.TryGetValue(parentPath, out var parent))
+                parent = EnsureDirectory(parentPath, dict);
+            var dir = NewDirectory();
+            return dict[path] = parent.Children[filename] = dir;
         }
     }
 }

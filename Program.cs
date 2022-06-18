@@ -8,12 +8,15 @@ using DokanNet;
 
 namespace Shaman.Dokan
 {
-    class SevenZipProgram
+    public class SevenZipProgram
     {
         delegate int ExtractArg(string argName, out string value);
 
         private static string _password = null;
         private static bool _hasReadPW = false;
+
+        public static bool VerboseOutput = false;
+        public static bool DebugDokan = false;
 
         static int Main(string[] args)
         {
@@ -23,9 +26,15 @@ namespace Shaman.Dokan
             }
             ExtractArg extractArg = (string argName, out string value) =>
             {
-                var index = Array.FindIndex(args, i => i == argName);
+                var index = Array.FindIndex(args, i => i.StartsWith(argName));
                 value = null;
                 if (index < 0) { }
+                else if (args[index].Length > argName.Length)
+                {
+                    value = args[index].Substring(argName.Length);
+                    value = value.StartsWith("=") ? value.Substring(1) : value;
+                    args = args.Take(index).Concat(args.Skip(index + 1)).ToArray();
+                }
                 else if (index < args.Length - 1)
                 {
                     value = args[index + 1];
@@ -76,6 +85,8 @@ namespace Shaman.Dokan
                     Console.WriteLine("Select an archive in {0}", file);
                 }
             }
+            DebugDokan = opts.Contains(" -d");
+            VerboseOutput = DebugDokan || opts.Contains(" -v");
 
             SevenZipFs fs;
             try
@@ -108,11 +119,19 @@ namespace Shaman.Dokan
             if (!fs.Encrypted && !string.IsNullOrEmpty(_password) && !_hasReadPW)
                 Console.WriteLine("Warning: archive is not encrypted!");
             _password = null;
+            if (!_hasReadPW)
+                fs.TryDecrypt();
             Console.WriteLine("  Has loaded {0}", file);
             if (fs.extractor.IsSolid)
                 Console.WriteLine("Warning: mounting performance of solid archives is very poor!");
+            if (opts.Contains(" -e")) // test extraction only
+            {
+                Console.WriteLine("  Test passed.");
+                return 0;
+            }
 
             bool doesOpen = opts.Contains(" -o") || opts.Contains(" --open");
+            bool testOnly = opts.Contains(" -t") || opts.Contains(" --dry");
             if (!string.IsNullOrWhiteSpace(labelName))
                 fs.VolumeLabel = labelName.Trim();
             else
@@ -123,14 +142,18 @@ namespace Shaman.Dokan
                     root = "./" + root.Substring(label.Length + 1);
                 label = !string.IsNullOrEmpty(label) ? $"{label} ({root})" : root;
                 fs.VolumeLabel = label;
-
             }
             fs.OnMount = (drive) =>
             {
                 if (drive != null)
                 {
                     Console.WriteLine("  Has mounted as {0} .", drive.EndsWith("\\") ? drive : drive + "\\");
-                    if (doesOpen)
+                    if (testOnly)
+                    {
+                        Console.WriteLine("  Test passed.");
+                        Environment.Exit(0);
+                    }
+                    else if (doesOpen)
                         Process.Start(drive.EndsWith("\\") ? drive : drive + "\\");
                 }
                 else
@@ -147,7 +170,7 @@ namespace Shaman.Dokan
                         options.Options = DokanOptions.CurrentSession | DokanOptions.WriteProtection
                             | DokanOptions.CaseSensitive
                             | DokanOptions.MountManager | DokanOptions.RemovableDrive;
-                        if (opts.Contains(" -v") || opts.Contains(" -d"))
+                        if (DebugDokan)
                             options.Options |= DokanOptions.DebugMode | DokanOptions.StderrOutput;
                     });
                     using (var instance = builder.Build(fs))

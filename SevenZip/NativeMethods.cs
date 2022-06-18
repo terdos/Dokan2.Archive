@@ -22,26 +22,6 @@ namespace SevenZip
         [DllImport("kernel32.dll", BestFitMapping = false, ThrowOnUnmappableChar = true)]
         public static extern IntPtr GetProcAddress(IntPtr hModule, [MarshalAs(UnmanagedType.LPStr)] string procName);
 
-        public static T SafeCast<T>(ref PropVariant var, T def)
-        {
-            object obj;
-            
-            try
-            {
-                obj = var.Object;
-            }
-            catch (Exception)
-            {
-                return def;
-            }
-
-            if (obj is T expected)
-            {
-                return expected;
-            }
-            
-            return def;
-        }
     }
 #endif
 }

@@ -425,15 +425,14 @@ namespace SevenZip
 
                 if (_filesCount != 0)
                 {
-                    if (_filesCount > 999)
+                    if (_filesCount > 999 || Shaman.Dokan.SevenZipProgram.VerboseOutput)
                         Console.WriteLine("  Parsing {0} files in the archive ...", _filesCount);
-                    var Now = DateTime.MinValue;
                     var data = new PropVariant();
 
                     #region Getting archive properties
                     {
                         _archive.GetArchiveProperty(ItemPropId.Solid, ref data);
-                        var solid = data.Object;
+                        var solid = data.OptionalBool;
                         if (solid is bool bSolid)
                             _isSolid = bSolid;
                         else if (_format == InArchiveFormat.Zip)
@@ -441,6 +440,7 @@ namespace SevenZip
                         else
                             _isSolid = true;
                     }
+                    #endregion
 
                     #region Getting archive items data
                     {
@@ -448,20 +448,17 @@ namespace SevenZip
                         {
                             fileInfo.Index = (int)i;
                             _archive.GetProperty(i, ItemPropId.LastWriteTime, ref data);
-                            fileInfo.LastWriteTime = NativeMethods.SafeCast(ref data, Now);
+                            fileInfo.LastWriteTime = data.EnsuredDateTime;
                             _archive.GetProperty(i, ItemPropId.CreationTime, ref data);
-                            fileInfo.CreationTime = NativeMethods.SafeCast(ref data, Now);
+                            fileInfo.CreationTime = data.EnsuredDateTime;
                             _archive.GetProperty(i, ItemPropId.Size, ref data);
-                            fileInfo.Size = NativeMethods.SafeCast<ulong>(ref data, 0);
-                            if (fileInfo.Size == 0)
-                                fileInfo.Size = NativeMethods.SafeCast<uint>(ref data, 0);
+                            fileInfo.Size = data.EnsuredSize;
                             _archive.GetProperty(i, ItemPropId.Encrypted, ref data);
-                            uint flags = NativeMethods.SafeCast(ref data, false) ? 1u : 0;
+                            uint flags = data.EnsuredBool ? 1u : 0;
                             _archive.GetProperty(i, ItemPropId.Method, ref data);
                             if (_isSolid)
                             {
-                                var Method = NativeMethods.SafeCast(ref data, "");
-                                flags |= Method.Equals("Copy", StringComparison.OrdinalIgnoreCase) ? 2u : 0;
+                                flags |= data.isLiteralStrCopy() ? 2u : 0;
                             }
                             else
                                 flags |= 4u;
@@ -471,7 +468,6 @@ namespace SevenZip
 
                     #endregion
 
-                    #endregion
                 }
             }
         }
@@ -499,16 +495,6 @@ namespace SevenZip
             }
 
             return indexes;
-        }
-
-        /// <summary>
-        /// Checks whether all the indexes are valid.
-        /// </summary>
-        /// <param name="indexes">The indexes to check.</param>
-        /// <returns>True is valid; otherwise, false.</returns>
-        private static bool CheckIndexes(params int[] indexes)
-        {
-            return indexes.All(i => i >= 0);
         }
 
         private void ArchiveExtractCallbackCommonInit(ArchiveExtractCallback aec)

@@ -2,7 +2,7 @@
   "profiles": {
     "Shaman.Dokan.Archive": {
       "commandName": "Project",
-      "commandLineArgs": "/e/tmp/mozilla-central-1379da0937ff9ae8aff8042fed31103dcd0bf13b.zip S: :auto"
+      "commandLineArgs": "\"F:\\Application\\Programmer\\MS.VS\\Visual Studio 2013 Ultimate.7z\" -e"
     }
   }
 }

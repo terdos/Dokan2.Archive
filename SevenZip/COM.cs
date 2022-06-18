@@ -44,6 +44,7 @@
         private readonly PropArray _propArray;
 
         [FieldOffset(8)] private IntPtr _value;
+        [FieldOffset(8)] private uint _boolWord;
         [FieldOffset(8)] private uint _uInt32Value;
         [FieldOffset(8)] private int _int32Value;
         [FieldOffset(8)] private long _int64Value;
@@ -54,14 +55,14 @@
         /// </summary>
         public VarEnum VarType
         {
-            private get
+            get
             {
-                return (VarEnum) _vt;
+                return (VarEnum)_vt;
             }
 
             set
             {
-                _vt = (ushort) value;
+                _vt = (ushort)value;
             }
         }
 
@@ -77,7 +78,7 @@
         /// <summary>
         /// Gets or sets the UInt32 value of the COM variant.
         /// </summary>
-        
+
         public uint UInt32Value
         {
             get => _uInt32Value;
@@ -87,7 +88,7 @@
         /// <summary>
         /// Gets or sets the UInt32 value of the COM variant.
         /// </summary>
-        
+
         public int Int32Value
         {
             get => _int32Value;
@@ -97,7 +98,7 @@
         /// <summary>
         /// Gets or sets the Int64 value of the COM variant
         /// </summary>
-        
+
         public long Int64Value
         {
             get => _int64Value;
@@ -107,11 +108,91 @@
         /// <summary>
         /// Gets or sets the UInt64 value of the COM variant
         /// </summary>
-        
+
         public ulong UInt64Value
         {
             get => _uInt64Value;
             set => _uInt64Value = value;
+        }
+
+        public bool? OptionalBool => VarType == VarEnum.VT_BOOL ? _boolWord != 0 : (bool?)null;
+
+        public bool EnsuredBool => VarType == VarEnum.VT_BOOL ? _boolWord != 0 : SafeCast(false);
+
+        public int EnsuredInt => VarType == VarEnum.VT_I4 ? Int32Value : SafeCast(0);
+
+        public uint EnsuredUInt => VarType == VarEnum.VT_UI4 ? UInt32Value : SafeCast(0u);
+
+#pragma warning disable CS0078
+        public long EnsuredLong => VarType == VarEnum.VT_I8 ? Int64Value : SafeCast(0l);
+#pragma warning restore CS0078
+
+        public ulong EnsuredULong => VarType == VarEnum.VT_UI8 ? UInt64Value : SafeCast(0ul);
+
+        public ulong EnsuredSize => VarType == VarEnum.VT_UI8 ? UInt64Value :
+                VarType == VarEnum.VT_UI4 ? UInt32Value : SafeCast(0u);
+
+        public DateTime EnsuredDateTime
+        {
+            get
+            {
+                if (VarType == VarEnum.VT_FILETIME)
+                {
+                    try
+                    {
+                        return DateTime.FromFileTime(Int64Value);
+                    }
+                    catch (ArgumentOutOfRangeException)
+                    {
+                        return DateTime.MinValue;
+                    }
+                }
+                return SafeCast(DateTime.MinValue);
+            }
+        }
+
+        public string EnsuredString => VarType == VarEnum.VT_BSTR ? Marshal.PtrToStringBSTR(Value) : SafeCast("");
+
+        public string EnsuredFilePath => VarType == VarEnum.VT_BSTR ? Marshal.PtrToStringBSTR(Value) : SafeCast("[no name]");
+
+        public string ParseAsDirAndName(out string filename)
+        {
+            if (VarType != VarEnum.VT_BSTR)
+            {
+                var path = VarType == VarEnum.VT_BSTR ? Marshal.PtrToStringBSTR(Value) : SafeCast("");
+                var lastSlash = path.LastIndexOf('\\');
+                filename = lastSlash >= 0 ? path.Substring(lastSlash + 1) : path;
+                return lastSlash >= 0 ? path.Substring(0, lastSlash) : "";
+            }
+            unsafe
+            {
+                var p = (char*)_value.ToPointer();
+                var end = (char*)((byte*)p + ((int*)p)[-1]);
+                var cur = end;
+                while (--cur >= p)
+                {
+                    if (*cur == '\\')
+                    {
+                        filename = Marshal.PtrToStringUni(new IntPtr(cur + 1), (int)(end - (cur + 1)));
+                        return Marshal.PtrToStringUni(new IntPtr(p), (int)(cur - p));
+                    }
+                }
+                filename = Marshal.PtrToStringUni(new IntPtr(p), (int)(end - p));
+                return "";
+            }
+        }
+
+        public bool isLiteralStrCopy()
+        {
+            if (VarType != VarEnum.VT_BSTR)
+                return SafeCast("").Equals("Copy", StringComparison.OrdinalIgnoreCase);
+            unsafe {
+                var p = (char*)Value.ToPointer();
+                //if (((long)p & 4) == 0)
+                return ((int*)p)[-1] == 8 && (*(ulong*)p & ~0x20002000200020ul) == 0x590050004f0043ul;
+                //return (p[0] & ~0x20) == 'C' && (p[1] & ~0x20) == 'O' && (p[2] & ~0x20) == 'P'
+                //  && (p[3] & ~0x20) == 'Y' && p[4] == '\0';
+            }
         }
 
         /// <summary>
@@ -165,6 +246,27 @@
                         return 0;
                 }
             }
+        }
+
+        public T SafeCast<T>(T def)
+        {
+            object obj;
+
+            try
+            {
+                obj = Object;
+            }
+            catch (Exception)
+            {
+                return def;
+            }
+
+            if (obj is T expected)
+            {
+                return expected;
+            }
+
+            return def;
         }
 
         /// <summary>

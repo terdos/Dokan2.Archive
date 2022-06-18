@@ -14,6 +14,7 @@ namespace Shaman.Dokan
     {
 
         public SevenZipExtractor extractor;
+        private string FileSystemName;
         private FsNode root;
         private ulong TotalSize;
         public bool Encrypted { get; private set; } = false;
@@ -22,6 +23,8 @@ namespace Shaman.Dokan
         public SevenZipFs(string path)
         {
             extractor = new SevenZipExtractor(path);
+            FileSystemName = extractor.Format.ToString() + "Fs";
+            VolumeLabel = FileSystemName;
             TotalSize = 0;
             root = CreateTree(extractor);
             CollectInfo();
@@ -87,8 +90,8 @@ namespace Shaman.Dokan
 
         public override NtStatus GetVolumeInformation(out string volumeLabel, out FileSystemFeatures features, out string fileSystemName, out uint maximumComponentLength, IDokanFileInfo info)
         {
-            fileSystemName = extractor.Format.ToString() + "Fs";
-            volumeLabel = VolumeLabel ?? fileSystemName;
+            fileSystemName = FileSystemName;
+            volumeLabel = VolumeLabel;
             features = FileSystemFeatures.CasePreservedNames | FileSystemFeatures.ReadOnlyVolume | FileSystemFeatures.UnicodeOnDisk | FileSystemFeatures.VolumeIsCompressed;
             maximumComponentLength = 256;
             return NtStatus.Success;
