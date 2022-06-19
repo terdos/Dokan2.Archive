@@ -459,12 +459,12 @@ namespace SevenZip
                                 _archive.GetProperty(i, ItemPropId.Encrypted, ref data);
                                 if (data.EnsuredBool)
                                     attrs |= (uint)FileAttributes.Encrypted;
-                                if (_isSolid)
-                                {
-                                    _archive.GetProperty(i, ItemPropId.Method, ref data);
-                                    if (data.isLiteralStrCopy())
-                                        attrs |= (uint)FileAttributes.Compressed;
-                                }
+                                // if (_isSolid)
+                                // {
+                                //     _archive.GetProperty(i, ItemPropId.Method, ref data);
+                                //     if (data.isLiteralStrCopy())
+                                //         attrs |= (uint)FileAttributes.Compressed;
+                                // }
                             }
                             fileInfo.Attributes = attrs;
                         };
@@ -474,31 +474,6 @@ namespace SevenZip
 
                 }
             }
-        }
-
-        /// <summary>
-        /// Produces an array of indexes from 0 to the maximum value in the specified array
-        /// </summary>
-        /// <param name="indexes">The source array</param>
-        /// <returns>The array of indexes from 0 to the maximum value in the specified array</returns>
-        private static uint[] SolidIndexes(uint[] indexes)
-        {
-            var max = indexes.Aggregate(0, (current, i) => Math.Max(current, (int) i));
-
-            if (max > 0)
-            {
-                max++;
-                var res = new uint[max];
-
-                for (var i = 0; i < max; i++)
-                {
-                    res[i] = (uint)i;
-                }
-
-                return res;
-            }
-
-            return indexes;
         }
 
         private void ArchiveExtractCallbackCommonInit(ArchiveExtractCallback aec)
@@ -790,11 +765,6 @@ namespace SevenZip
             //try
             {
                 var indexes = new[] { (uint)index };
-
-                if (_isSolid && !file.Info.IsCopy)
-                {
-                    indexes = SolidIndexes(indexes);
-                }
                 
                 using (var aec = GetArchiveExtractCallback(stream, (uint) index, indexes.Length))
                 {
@@ -904,8 +874,6 @@ namespace SevenZip
             ClearExceptions();
             var index = file.Info.Index;
             var indexes = new[] { (uint)index };
-            if (_isSolid && file.Info.IsCopy)
-                indexes = SolidIndexes(indexes);
 
             using (var aec = GetArchiveExtractCallback(Stream.Null, (uint)index, indexes.Length))
                 //try

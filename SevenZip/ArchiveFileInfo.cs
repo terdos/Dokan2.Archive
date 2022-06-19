@@ -1,4 +1,4 @@
-﻿#if UNMANAGED
+#if UNMANAGED
 
 namespace SevenZip
 {
@@ -57,7 +57,7 @@ namespace SevenZip
         /// <summary>
         /// Compression method for the file.
         /// </summary>
-        public bool IsCopy => (Attributes & (uint)System.IO.FileAttributes.Compressed) != 0;
+        //public bool IsCopy => (Attributes & (uint)System.IO.FileAttributes.Compressed) != 0;
 
         /// <summary>
         /// Determines whether the specified System.Object is equal to the current ArchiveFileInfo.
