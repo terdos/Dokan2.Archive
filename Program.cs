@@ -22,7 +22,7 @@ namespace Shaman.Dokan
         {
             if (args.Length == 0)
             {
-                Console.WriteLine("Usage: ArchiveFs.exe [-ovd] <archive-file> Drive: [root-folder] [-l label] [-p [password]]");
+                Console.WriteLine("Usage: ArchiveFs.exe [-adotv] <archive-file> Drive: [root-folder] [-l label] [-p [password]]");
             }
             ExtractArg extractArg = (string argName, out string value) =>
             {
@@ -60,15 +60,32 @@ namespace Shaman.Dokan
                 mountPoint = mountPoint.Substring(0, 1);
             bool isDrive = mountPoint != null && mountPoint.Length == 1
                 && 'a' <= mountPoint.ToLower()[0] && mountPoint.ToLower()[0] <= 'z';
-            if (isDrive && Directory.Exists(mountPoint + ":\\"))
-            {
-                Console.WriteLine("The drive letter has been used.");
-                return 1;
-            }
+            bool autoDrive = opts.Contains(" -a") || opts.Contains(" --auto") || string.IsNullOrEmpty(mountPoint);
             if (string.IsNullOrEmpty(mountPoint))
             {
                 mountPoint = "X";
                 isDrive = true;
+            }
+            if (isDrive && Directory.Exists(mountPoint + ":\\"))
+            {
+                var names = DriveInfo.GetDrives();
+                var existing = mountPoint;
+                if (autoDrive)
+                {
+                    var used = names.Select(i => (i.Name[0] & ~0x20) - 'A').ToDictionary(i => i);
+                    var cur = (mountPoint[0] & ~0x20) - 'A';
+                    int next;
+                    for (next = cur; ++next < 26 && used.ContainsKey(next); ) { }
+                    if (next >= 26)
+                        for (next = cur; --next >= 3 && used.ContainsKey(next); ) { } // start from D:
+                    if (next >= 3 && next <= 26)
+                        mountPoint = ((char)(next + 'A')).ToString();
+                }
+                if (existing == mountPoint)
+                {
+                    Console.WriteLine("The drive letter has been used.");
+                    return 1;
+                }
             }
             var rootFolder = args.Skip(2).FirstOrDefault();
             file = file.Replace('/', '\\');
