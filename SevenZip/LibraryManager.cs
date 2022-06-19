@@ -1,6 +1,7 @@
 namespace SevenZip
 {
     using Microsoft.Win32;
+    using Shaman.Dokan;
     using System;
     using System.Collections.Generic;
     using System.Configuration;
@@ -88,7 +89,10 @@ namespace SevenZip
                 if (file.Length > 0)
                 {
                     var file2 = Path.Combine(Path.GetDirectoryName(file), "7z.dll");
-                    return file2 != file && File.Exists(file2) ? file2 : file;
+                    file = file2 != file && File.Exists(file2) ? file2 : file.EndsWith(".dll") ? file : null;
+                    if (file != null && SevenZipProgram.VerboseOutput)
+                        Console.WriteLine("  Auto import an installed {0}", file);
+                    return file;
                 }
             }
             return null;
