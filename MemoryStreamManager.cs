@@ -2,26 +2,30 @@
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using static Shaman.Dokan.FileSystemBase;
 
 namespace Shaman.Dokan
 {
     public class MemoryStreamManager
     {
-        private Action<Stream> write;
+        private Action<FsNode, Stream> write;
+        public readonly FsNode Item;
+        public long Length;
+
         private MemoryStreamInternal ms;
 
         private volatile bool completed;
-        public MemoryStreamManager(Action<Stream> write, long? length)
+        public MemoryStreamManager(Action<FsNode, Stream> load, FsNode item)
         {
-            this.write = write;
-            this.Length = length;
+            write = load;
+            Item = item;
+            Length = (long)item.Info.Size;
         }
 
         public Stream CreateStream()
         {
             return new ConsumerStream(this);
         }
-        public long? Length;
 
         internal int Read(long position, byte[] buffer, int offset, int count)
         {
@@ -53,6 +57,13 @@ namespace Shaman.Dokan
                 users--;
                 if (users == 0)
                 {
+                    if (MemoryStreamCache.Total >= 50)
+                    {
+                        isdisposed = true;
+                        this.ms.Dispose();
+                        MemoryStreamCache.DeleteItem(Item, this);
+                        return;
+                    }
                     var tok = this.usageToken; 
                     Timer timer = null;
                     timer = new System.Threading.Timer(dummy =>
@@ -64,10 +75,11 @@ namespace Shaman.Dokan
                             {
                                 isdisposed = true;
                                 this.ms.Dispose();
-                                //Console.WriteLine("Disposed.");
+                                MemoryStreamCache.DeleteItem(Item, this);
                             }
                         }
-                    }, null, Configuration_KeepFileInMemoryTimeMs, Timeout.Infinite);
+                    }, null, MemoryStreamCache.Total > 16 ? 3000 :
+                    Configuration_KeepFileInMemoryTimeMs, Timeout.Infinite);
                 }
             }
         }
@@ -80,13 +92,13 @@ namespace Shaman.Dokan
                 users++;
                 if (ms == null)
                 {
-                    ms = new MemoryStreamInternal((int)Length.GetValueOrDefault(32 * 1024));
+                    ms = new MemoryStreamInternal((int)Length);
                     Task.Run(() =>
                     {
                         try
                         {
-                            write(ms);
-                            if (this.Length != null && this.Length.Value != ms.length)
+                            write(Item, ms);
+                            if (Length != ms.length)
                                 throw new Exception("Promised length was different from actual length.");
                             this.Length = ms.length;
                         }
@@ -131,14 +143,15 @@ namespace Shaman.Dokan
 
         public override bool CanWrite => false;
 
-        public override long Length => memoryStreamManager.Length ?? throw new NotSupportedException();
+        public override long Length => memoryStreamManager.Length;
 
         public override long Position
         {
-            get => position; set
+            get => position;
+            set
             {
                 if (position < 0) throw new ArgumentException();
-                if (memoryStreamManager.Length != null && position > memoryStreamManager.Length) throw new ArgumentException();
+                if (position > memoryStreamManager.Length) throw new ArgumentException();
                 position = value;
             }
         }

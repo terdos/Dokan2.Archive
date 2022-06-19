@@ -16,10 +16,12 @@ namespace Shaman.Dokan
         public SevenZipExtractor extractor;
         private string FileSystemName;
         private FsNode root;
+        private MemoryStreamCache cache;
         private ulong TotalSize;
         public bool Encrypted { get; private set; } = false;
         public string RootFolder { get; private set; }
         public string VolumeLabel;
+
         public SevenZipFs(string path)
         {
             extractor = new SevenZipExtractor(path);
@@ -28,13 +30,15 @@ namespace Shaman.Dokan
             TotalSize = 0;
             root = CreateTree(extractor);
             CollectInfo();
-            cache = new MemoryStreamCache<FsNode>((item, stream) =>
+            cache = new MemoryStreamCache(ExtractFile);
+        }
+
+        public void ExtractFile(FsNode item, Stream stream)
+        {
+            lock (readerLock)
             {
-                lock (readerLock)
-                {
-                    extractor.ExtractFile(item, stream);
-                }
-            });
+                extractor.ExtractFile(item, stream);
+            }
         }
 
         private object readerLock = new object();
@@ -67,15 +71,13 @@ namespace Shaman.Dokan
                 if ((access & (FileAccess.ReadData | FileAccess.GenericRead)) != 0)
                 {
                     //Console.WriteLine("ReadData: " + fileName);
-                    info.Context = cache.OpenStream(item, (long)item.Info.Size);
+                    info.Context = cache.OpenStream(item);
 
                 }
             }
             return NtStatus.Success;
         }
 
-
-        private MemoryStreamCache<FsNode> cache;
         public override NtStatus GetFileInformation(string fileName, out FileInformation fileInfo, IDokanFileInfo info)
         {
             var item = GetNode(root, fileName, out var name);

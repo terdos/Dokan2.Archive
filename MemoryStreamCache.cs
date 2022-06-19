@@ -4,19 +4,23 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using static Shaman.Dokan.FileSystemBase;
 
 namespace Shaman.Dokan
 {
-    public class MemoryStreamCache<TKey>
+    public class MemoryStreamCache
     {
-        private Action<TKey, Stream> load;
-        public MemoryStreamCache(Action<TKey, Stream> load)
+        private Action<FsNode, Stream> load;
+        public MemoryStreamCache(Action<FsNode, Stream> load)
         {
             this.load = load;
         }
 
-        private Dictionary<TKey, MemoryStreamManager> streams = new Dictionary<TKey, MemoryStreamManager>();
-        public Stream OpenStream(TKey item, long? size, bool onlyIfAlreadyAvailable = false)
+        public static volatile int Total;
+
+        public static readonly Dictionary<FsNode, MemoryStreamManager> streams
+            = new Dictionary<FsNode, MemoryStreamManager>();
+        public Stream OpenStream(FsNode item)
         {
             lock (streams)
             {
@@ -31,10 +35,10 @@ namespace Shaman.Dokan
                         }
                     }
                 }
+                else
+                    Total++;
 
-                if (onlyIfAlreadyAvailable) return null;
-
-                ms = new MemoryStreamManager(stream => load(item, stream), size);
+                ms = new MemoryStreamManager(load, item);
                 streams[item] = ms;
                 return ms.CreateStream();
 
@@ -42,48 +46,22 @@ namespace Shaman.Dokan
             }
         }
 
-        public long? TryGetLength(TKey item)
+        public static void DeleteItem(FsNode key, MemoryStreamManager value)
         {
-            if (item is FileSystemBase.FsNode archiveFile)
-            {
-                return Math.Max((long)archiveFile.Info.Size, 0);
-            }
             lock (streams)
             {
-                if (streams.TryGetValue(item, out var manager))
+                if (streams.TryGetValue(key, out var cur) && cur == value)
                 {
-                    return manager.Length;
+                    streams.Remove(key);
+                    Total--;
                 }
+
             }
-            return null;
         }
 
-
-        private static byte[] sharedGarbageBuffer = new byte[32 * 1024];
-
-        public long GetLength(TKey item)
+        public long GetLength(FsNode item)
         {
-            if (item is FileSystemBase.FsNode archiveFile)
-            {
-                return Math.Max((long)archiveFile.Info.Size, 0);
-            }
-            lock (streams)
-            {
-                using (var s = OpenStream(item, null))
-                {
-                    var manager = streams[item];
-                    if (manager.Length != null) return manager.Length.Value;
-
-                    long len = 0;
-                    while (true)
-                    {
-                        var q = s.Read(sharedGarbageBuffer, 0, sharedGarbageBuffer.Length);
-                        if (q == 0) break;
-                        len += q;
-                    }
-                    return len;
-                }
-            }
+            return Math.Max((long)item.Info.Size, 0);
         }
     }
 }

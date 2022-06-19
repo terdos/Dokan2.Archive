@@ -52,8 +52,8 @@ namespace Shaman.Dokan
             if (args.Length == 0 || opts.Contains(" -h") || opts.Contains(" --help"))
             {
                 Console.WriteLine("Usage: Dokan2.Archive.exe [-aAdeotv]\n" +
-                    "\tarchive-file Drive: [root-folder]\n" +
-                    "\t[-l label] [-c/-O extractor-flags] [-p [password]]");
+                    "            archive-file Drive: [root-folder]\n" +
+                    "            [-l label] [-c/-O extractor-flags] [-p [password]]");
                 return 0;
             }
 
