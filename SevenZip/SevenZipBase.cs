@@ -13,8 +13,8 @@ namespace SevenZip
     /// </summary>
     public abstract class SevenZipBase : MarshalByRefObject
     {
-        private readonly bool _reportErrors;
-        private readonly int _uniqueID;
+        private const bool _reportErrors = true;
+        private readonly int _uniqueID = 1;
         private static readonly List<int> Identifiers = new List<int>();
 
         /// <summary>
@@ -92,11 +92,6 @@ namespace SevenZip
         public EventSynchronizationStrategy EventSynchronization { get; set; }
 
         /// <summary>
-        /// Gets the unique identifier of this SevenZipBase instance.
-        /// </summary>
-        public int UniqueID => _uniqueID;
-
-        /// <summary>
         /// User exceptions thrown during the requested operations, for example, in events.
         /// </summary>
         private readonly List<Exception> _exceptions = new List<Exception>();
@@ -122,17 +117,6 @@ namespace SevenZip
         }
 
         /// <summary>
-        /// Initializes a new instance of the SevenZipBase class.
-        /// </summary>
-        /// <param name="password">The archive password.</param>
-        protected SevenZipBase(string password = "")
-        {
-            Password = password;
-            _reportErrors = true;
-            _uniqueID = GetUniqueID();
-        }
-
-        /// <summary>
         /// Removes the UniqueID from the list.
         /// </summary>
         ~SevenZipBase()
@@ -143,11 +127,6 @@ namespace SevenZip
                 Identifiers.Remove(_uniqueID);
             }
         }
-
-        /// <summary>
-        /// Gets or sets the archive password
-        /// </summary>
-        public string Password { get; protected set; }
 
         /// <summary>
         /// Gets or sets throw exceptions on archive errors flag

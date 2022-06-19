@@ -190,59 +190,6 @@ namespace SevenZip
             Init(archiveFullName);
         }
 
-        /// <summary>
-        /// Initializes a new instance of SevenZipExtractor class.
-        /// </summary>
-        /// <param name="archiveFullName">The archive full file name.</param>
-        /// <param name="password">Password for an encrypted archive.</param>
-        public SevenZipExtractor(string archiveFullName, string password)
-            : base(password)
-        {
-            Init(archiveFullName);
-        }
-
-        /// <summary>
-        /// Initializes a new instance of SevenZipExtractor class.
-        /// </summary>
-        /// <param name="archiveFullName">The archive full file name.</param>
-        /// <param name="password">Password for an encrypted archive.</param>
-        /// <param name="format">Manual archive format setup. You SHOULD NOT normally specify it this way.
-        /// Instead, use SevenZipExtractor(string archiveFullName, string password), that constructor
-        /// automatically detects the archive format.</param>
-        public SevenZipExtractor(string archiveFullName, string password, InArchiveFormat format)
-            : base(password)
-        {
-            _format = format;
-            Init(archiveFullName);
-        }
-
-        /// <summary>
-        /// Initializes a new instance of SevenZipExtractor class.
-        /// </summary>
-        /// <param name="archiveStream">The stream to read the archive from.</param>
-        /// <param name="password">Password for an encrypted archive.</param>
-        /// <remarks>The archive format is guessed by the signature.</remarks>
-        public SevenZipExtractor(Stream archiveStream, string password)
-            : base(password)
-        {
-            Init(archiveStream);
-        }
-
-        /// <summary>
-        /// Initializes a new instance of SevenZipExtractor class.
-        /// </summary>
-        /// <param name="archiveStream">The stream to read the archive from.</param>
-        /// <param name="password">Password for an encrypted archive.</param>
-        /// <param name="format">Manual archive format setup. You SHOULD NOT normally specify it this way.
-        /// Instead, use SevenZipExtractor(Stream archiveStream, string password), that constructor
-        /// automatically detects the archive format.</param>
-        public SevenZipExtractor(Stream archiveStream, string password, InArchiveFormat format)
-            : base(password)
-        {
-            _format = format;
-            Init(archiveStream);
-        }
-
         #endregion
 
         #region Properties
@@ -308,9 +255,7 @@ namespace SevenZip
 
         private ArchiveOpenCallback GetArchiveOpenCallback()
         {
-            return _openCallback ?? (_openCallback = string.IsNullOrEmpty(Password)
-                                    ? new ArchiveOpenCallback(_fileName)
-                                    : new ArchiveOpenCallback(_fileName, Password));
+            return _openCallback ?? (_openCallback = new ArchiveOpenCallback(_fileName));
         }
 
         /// <summary>
@@ -494,9 +439,8 @@ namespace SevenZip
         /// <returns>The ArchiveExtractCallback callback</returns>
         private ArchiveExtractCallback GetArchiveExtractCallback(string directory, int filesCount, List<uint> actualIndexes)
         {
-            var aec = string.IsNullOrEmpty(Password) ? 
-                new ArchiveExtractCallback(_archive, directory, filesCount, PreserveDirectoryStructure, actualIndexes, this) : 
-                new ArchiveExtractCallback(_archive, directory, filesCount, PreserveDirectoryStructure, actualIndexes, Password, this);
+            var aec =
+                new ArchiveExtractCallback(_archive, "", filesCount, PreserveDirectoryStructure, actualIndexes, this);
             ArchiveExtractCallbackCommonInit(aec);
 
             return aec;
@@ -511,21 +455,10 @@ namespace SevenZip
         /// <returns>The ArchiveExtractCallback callback</returns>
         private ArchiveExtractCallback GetArchiveExtractCallback(Stream stream, uint index, int filesCount)
         {
-            var aec = string.IsNullOrEmpty(Password)
-                      ? new ArchiveExtractCallback(_archive, stream, filesCount, index, this)
-                      : new ArchiveExtractCallback(_archive, stream, filesCount, index, Password, this);
+            var aec = new ArchiveExtractCallback(_archive, stream, filesCount, index, this);
             ArchiveExtractCallbackCommonInit(aec);
 
             return aec;
-        }
-
-        private void FreeArchiveExtractCallback(ArchiveExtractCallback callback)
-        {
-            // callback.Open -= ((s, e) => { _unpackedSize = (long)e.TotalSize; });
-            // callback.FileExtractionStarted -= FileExtractionStartedEventProxy;
-            // callback.FileExtractionFinished -= FileExtractionFinishedEventProxy;
-            // callback.Extracting -= ExtractingEventProxy;
-            // callback.FileExists -= FileExistsEventProxy;
         }
 
         #endregion        

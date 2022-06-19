@@ -58,16 +58,6 @@ namespace SevenZip
             Init(fileName);
         }
 
-        /// <summary>
-        /// Initializes a new instance of the ArchiveOpenCallback class.
-        /// </summary>
-        /// <param name="fileName">The archive file name.</param>
-        /// <param name="password">Password for the archive.</param>
-        public ArchiveOpenCallback(string fileName, string password) : base(password)
-        {
-            Init(fileName);
-        }
-
         #region IArchiveOpenCallback Members
 
         public void SetTotal(IntPtr files, IntPtr bytes) {}
@@ -168,7 +158,7 @@ namespace SevenZip
         /// <returns>Zero if everything is OK</returns>
         public int CryptoGetTextPassword(out string password)
         {
-            password = !string.IsNullOrEmpty(Password) ? Password : Shaman.Dokan.SevenZipProgram.InputPassword();
+            password = Shaman.Dokan.SevenZipProgram.InputPassword();
             return 0;
         }
 

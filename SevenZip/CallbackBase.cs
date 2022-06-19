@@ -8,8 +8,7 @@ namespace SevenZip
 
     internal class CallbackBase : MarshalByRefObject
     {
-        private readonly string _password;
-        private readonly bool _reportErrors;
+        private static readonly bool _reportErrors = true;
 
         /// <summary>
         /// User exceptions thrown during the requested operations, for example, in events.
@@ -22,29 +21,9 @@ namespace SevenZip
         /// </summary>
         protected CallbackBase()
         {
-            _password = "";
-            _reportErrors = true;
         }
 
-        /// <summary>
-        /// Initializes a new instance of the CallbackBase class.
-        /// </summary>
-        /// <param name="password">The archive password.</param>
-        protected CallbackBase(string password)
-        {
-            if (String.IsNullOrEmpty(password))
-            {
-                throw new SevenZipException("Empty password was specified.");
-            }
-            _password = password;
-            _reportErrors = true;
-        }
         #endregion
-
-        /// <summary>
-        /// Gets or sets the archive password
-        /// </summary>
-        public string Password => _password;
 
         /// <summary>
         /// Gets or sets the value indicating whether the current procedure was cancelled.

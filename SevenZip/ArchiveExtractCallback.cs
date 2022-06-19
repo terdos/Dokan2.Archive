@@ -58,23 +58,6 @@ namespace SevenZip
         /// Initializes a new instance of the ArchiveExtractCallback class
         /// </summary>
         /// <param name="archive">IInArchive interface for the archive</param>
-        /// <param name="directory">Directory where files are to be unpacked to</param>
-        /// <param name="filesCount">The archive files count</param>
-        /// <param name="password">Password for the archive</param>
-        /// <param name="extractor">The owner of the callback</param>
-        /// <param name="actualIndexes">The list of actual indexes (solid archives support)</param>
-        /// <param name="directoryStructure">The value indicating whether to preserve directory structure of extracted files.</param>
-        public ArchiveExtractCallback(IInArchive archive, string directory, int filesCount, bool directoryStructure,
-            List<uint> actualIndexes, string password, SevenZipExtractor extractor)
-            : base(password)
-        {
-            Init(archive, directory, filesCount, directoryStructure, actualIndexes, extractor);
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the ArchiveExtractCallback class
-        /// </summary>
-        /// <param name="archive">IInArchive interface for the archive</param>
         /// <param name="stream">The stream where files are to be unpacked to</param>
         /// <param name="filesCount">The archive files count</param>
         /// <param name="fileIndex">The file index for the stream</param>
@@ -94,7 +77,7 @@ namespace SevenZip
         /// <param name="password">Password for the archive</param>
         /// <param name="extractor">The owner of the callback</param>
         public ArchiveExtractCallback(IInArchive archive, Stream stream, int filesCount, uint fileIndex, string password, SevenZipExtractor extractor)
-            : base(password)
+            : base()
         {
             Init(archive, stream, filesCount, fileIndex, extractor);
         }
@@ -297,7 +280,7 @@ namespace SevenZip
         /// <inheritdoc />
         public int CryptoGetTextPassword(out string password)
         {
-            password = !string.IsNullOrEmpty(Password) ? Password : Shaman.Dokan.SevenZipProgram.InputPassword();
+            password = Shaman.Dokan.SevenZipProgram.InputPassword();
             return 0;
         }
 

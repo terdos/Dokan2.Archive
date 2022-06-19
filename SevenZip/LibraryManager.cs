@@ -159,37 +159,7 @@ namespace SevenZip
             }
         }
 
-        /// <summary>
-        /// Gets the value indicating whether the library supports modifying archives.
-        /// </summary>
-        public static bool ModifyCapable
-        {
-            get
-            {
-                lock (_syncRoot)
-                {
-                    if (!_modifyCapable.HasValue)
-                    {
-                        if (_libraryFileName == null)
-                        {
-                            _libraryFileName = DetermineLibraryFilePath();
-                        }
-
-                        var dllVersionInfo = FileVersionInfo.GetVersionInfo(_libraryFileName);
-                        _modifyCapable = dllVersionInfo.FileMajorPart >= 9;
-                    }
-
-                    return _modifyCapable.Value;
-                }
-            }
-        }
-
         static readonly string Namespace = Assembly.GetExecutingAssembly().GetManifestResourceNames()[0].Split('.')[0];
-
-        private static string GetResourceString(string str)
-        {
-            return Namespace + ".arch." + str;
-        }
 
         /// <summary>
         /// Removes user from reference list and frees the 7-zip library if it becomes empty
@@ -319,51 +289,6 @@ namespace SevenZip
                 }
 
                 return _inArchives[user][format];
-            }
-        }
-
-        /// <summary>
-        /// Gets IOutArchive interface to pack 7-zip archives.
-        /// </summary>
-        /// <param name="format">Archive format.</param>  
-        /// <param name="user">Archive format user.</param>
-        public static IOutArchive OutArchive(OutArchiveFormat format, object user)
-        {
-            lock (_syncRoot)
-            {
-                if (_outArchives[user][format] == null)
-                {
-#if NET45 || NETSTANDARD2_0
-                    var sp = new SecurityPermission(SecurityPermissionFlag.UnmanagedCode);
-                    sp.Demand();
-#endif
-                    if (_modulePtr == IntPtr.Zero)
-                    {
-                        throw new SevenZipLibraryException();
-                    }
-
-                    var createObject = (NativeMethods.CreateObjectDelegate)
-                        Marshal.GetDelegateForFunctionPointer(
-                            NativeMethods.GetProcAddress(_modulePtr, "CreateObject"),
-                            typeof(NativeMethods.CreateObjectDelegate));
-                    var interfaceId = typeof(IOutArchive).GUID;
-                    
-
-                    try
-                    {
-                        var classId = Formats.OutFormatGuids[format];
-                        createObject(ref classId, ref interfaceId, out var result);
-                        
-                        InitUserOutFormat(user, format);
-                        _outArchives[user][format] = result as IOutArchive;
-                    }
-                    catch (Exception)
-                    {
-                        throw new SevenZipLibraryException("Your 7-zip library does not support this archive type.");
-                    }
-                }
-
-                return _outArchives[user][format];
             }
         }
 
