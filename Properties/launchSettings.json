@@ -1,8 +1,0 @@
-{
-  "profiles": {
-    "Shaman.Dokan.Archive": {
-      "commandName": "Project",
-      "commandLineArgs": "\"F:\\Application\\Programmer\\MS.VS\\Visual Studio 2013 Ultimate.7z\" -e"
-    }
-  }
-}

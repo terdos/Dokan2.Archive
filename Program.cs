@@ -20,10 +20,6 @@ namespace Shaman.Dokan
 
         static int Main(string[] args)
         {
-            if (args.Length == 0)
-            {
-                Console.WriteLine("Usage: ArchiveFs.exe [-adotv] <archive-file> Drive: [root-folder] [-l label] [-p [password]]");
-            }
             ExtractArg extractArg = (string argName, out string value) =>
             {
                 var index = Array.FindIndex(args, i => i.StartsWith(argName));
@@ -46,8 +42,21 @@ namespace Shaman.Dokan
             };
             var labelIndex = extractArg("-l", out var labelName);
             var passwordIndex = extractArg("-p", out _password);
-            var opts = " " + string.Join(" ", args.Where(i => i[0] == '-'));
-            args = args.Where(i => i[0] != '-').ToArray();
+            string[] extractorFlags = new string[0];
+            while (extractArg("-c", out var extractorFlag) >= 0)
+                extractorFlags = extractorFlags.Concat((extractorFlag ?? "").Split(',', ';')).ToArray();
+            while (extractArg("-O", out var extractorFlag) >= 0)
+                extractorFlags = extractorFlags.Concat((extractorFlag ?? "").Split(',', ';')).ToArray();
+            var opts = " " + string.Join(" ", args.Where(i => i.Length > 0 && i[0] == '-'));
+            args = args.Where(i => i.Length == 0 || i[0] != '-').ToArray();
+            if (args.Length == 0 || opts.Contains(" -h") || opts.Contains(" --help"))
+            {
+                Console.WriteLine("Usage: Dokan2.Archive.exe [-aAdeotv]\n" +
+                    "\tarchive-file Drive: [root-folder]\n" +
+                    "\t[-l label] [-c/-O extractor-flags] [-p [password]]");
+                return 0;
+            }
+
             var file = args.FirstOrDefault();
             if (string.IsNullOrEmpty(file))
             {
@@ -89,7 +98,8 @@ namespace Shaman.Dokan
             }
             var rootFolder = args.Skip(2).FirstOrDefault();
             file = file.Replace('/', '\\');
-            rootFolder = rootFolder != null ? rootFolder.Replace('/', '\\') : null;
+            rootFolder = !string.IsNullOrWhiteSpace(rootFolder) ? rootFolder.Replace('/', '\\')
+                : opts.Contains(" -A") ? ":auto" : null;
             args = null;
 
             if (file.Length > 3 && file[0] == '\\' && file[1] != '\\' && !File.Exists(file))
@@ -138,7 +148,20 @@ namespace Shaman.Dokan
             _password = null;
             if (!_hasReadPW)
                 fs.TryDecompress();
+            {
+                var mt = Environment.ProcessorCount;
+                extractorFlags = new string[]
+                {
+                    "crc0", "mt" + (mt >= 8 ? 4 : mt >= 4 ? 2 : 1)
+                }.Concat(extractorFlags.Where(i => i.Length > 0)).ToArray();
+                fs.extractor.SetProperties(extractorFlags);
+                extractorFlags = null;
+            }
             Console.WriteLine("  Has loaded {0}", file);
+            if (rootFolder != null && rootFolder == ":auto" && fs.RootFolder != null)
+            {
+                Console.WriteLine("  Auto use \"{0}\" as root", fs.RootFolder);
+            }
             if (fs.extractor.IsSolid)
                 Console.WriteLine("Warning: mounting performance of solid archives is very poor!");
             if (opts.Contains(" -e")) // test extraction only
@@ -204,6 +227,8 @@ namespace Shaman.Dokan
             {
                 Console.Out.Flush();
                 Console.Error.Flush();
+                Console.Error.WriteLine("Try to mount into {0}, but:"
+                    , isDrive ? mountPoint.ToUpper() + ":\\" : mountPoint);
                 Console.Error.WriteLine(ex.ToString());
                 return 9;
             }

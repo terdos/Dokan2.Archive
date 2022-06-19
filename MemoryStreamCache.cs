@@ -15,17 +15,6 @@ namespace Shaman.Dokan
             this.load = load;
         }
 
-        public MemoryStreamCache(Func<TKey, Stream> getStream)
-        {
-            this.load = (key, stream) =>
-            {
-                using (var s = getStream(key))
-                {
-                    s.CopyTo(stream);
-                }
-            };
-        }
-
         private Dictionary<TKey, MemoryStreamManager> streams = new Dictionary<TKey, MemoryStreamManager>();
         public Stream OpenStream(TKey item, long? size, bool onlyIfAlreadyAvailable = false)
         {

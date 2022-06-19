@@ -92,6 +92,30 @@ namespace SevenZip
             }
         }
 
+        public void SetProperties(params string[] args)
+        {
+            SetProperties(args, null);
+        }
+
+        public void SetProperties(string[] args, PropVariant[] props = null)
+        {
+            if (args.Length == 0)
+                return;
+            var setter = (ISetProperties)_archive;
+            if (setter == null)
+                return;
+            if (props == null)
+            {
+                props = new PropVariant[args.Length];
+                foreach (var prop in props)
+                    prop.UnsafeClear();
+            }
+            int ret = setter.SetProperties(args, props, (uint)args.Length);
+            if (ret != 0)
+                Console.Error.WriteLine("The format {0} doesn't support {1}: error = {2}"
+                    , _format.ToString(), args[0], ret);
+        }
+
         /// <summary>
         /// General initialization function.
         /// </summary>

@@ -339,6 +339,12 @@
         {
             return !afi1.Equals(afi2);
         }
+
+        // warning: this is not memory safe - ignore any of its pointers
+        public void UnsafeClear()
+        {
+            _vt = (ushort)VarEnum.VT_EMPTY;
+        }
     }
 
     /// <summary>
@@ -1234,8 +1240,11 @@
         /// <param name="names">The names of the properties</param>
         /// <param name="values">The values of the properties</param>
         /// <param name="numProperties">The properties count</param>
-        /// <returns></returns>        
-        int SetProperties(IntPtr names, IntPtr values, int numProperties);
+        /// <returns></returns>
+        [PreserveSig]
+        int SetProperties(
+            [In][MarshalAs(UnmanagedType.LPArray, ArraySubType = UnmanagedType.LPWStr)] string[] names,
+            [In][MarshalAs(UnmanagedType.LPArray)] PropVariant[] values, uint numProperties);
     }
 #endif
             }

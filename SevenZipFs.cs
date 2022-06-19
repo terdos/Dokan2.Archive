@@ -23,7 +23,7 @@ namespace Shaman.Dokan
         public SevenZipFs(string path)
         {
             extractor = new SevenZipExtractor(path);
-            FileSystemName = extractor.Format.ToString() + "Fs";
+            FileSystemName = "ArchiveFS." + extractor.Format.ToString();
             VolumeLabel = FileSystemName;
             TotalSize = 0;
             root = CreateTree(extractor);
@@ -146,8 +146,10 @@ namespace Shaman.Dokan
             return size >= 0 ? NtStatus.Success : NtStatus.NotImplemented;
         }
 
+        // should only be called up to once
         public bool SetRoot(string newRootFolder)
         {
+            RootFolder = null;
             if (newRootFolder == ":auto")
             {
                 if (root.Children.Count == 1)
