@@ -141,11 +141,6 @@ namespace Shaman.Dokan
             File.SetLastWriteTimeUtc(filePath, value);
         }
 
-        protected static bool IsDirectory(uint attrs)
-        {
-            return (attrs & (uint)FileAttributes.Directory) != 0;
-        }
-
         protected const uint FileAttributes_NotFound = 0xFFFFFFFF;
 
         protected static Func<string, bool> GetMatcher(string searchPattern)
@@ -373,14 +368,14 @@ namespace Shaman.Dokan
             {
                 for (uint i = 0; i < filesCount; i++)
                 {
-                    extractor._archive.GetProperty(i, ItemPropId.Attributes, ref prop);
-                    var attrs = prop.EnsuredUInt;
+                    extractor._archive.GetProperty(i, ItemPropId.IsDirectory, ref prop);
+                    var isDir = prop.EnsuredBool;
                     extractor._archive.GetProperty(i, ItemPropId.Path, ref prop);
                     var dir = prop.ParseAsDirAndName(out var name);
                     if (!dict.TryGetValue(dir, out var directory))
                         directory = EnsureDirectory(dir, dict);
                     FsNode f;
-                    if ((attrs & (uint)FileAttributes.Directory) != 0)
+                    if (isDir)
                     {
                         dir = dir + '\\' + name;
                         if (!dict.TryGetValue(dir, out f))
@@ -393,10 +388,9 @@ namespace Shaman.Dokan
                     else
                     {
                         f = new FsNode();
-                        //f.Info.Attributes = attrs | (uint)FileAttributes.ReadOnly;
                         directory.Children[name.Length > 0 ? name : "" + i] = f;
                     }
-                    iter(i, ref f.Info);
+                    iter(i, ref f.Info, isDir);
                 }
             }
             catch (InvalidCastException)

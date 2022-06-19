@@ -124,7 +124,7 @@ namespace Shaman.Dokan
         {
             return new FileInformation()
             {
-                Attributes = (FileAttributes)item.Info.Attributes,
+                Attributes = (FileAttributes)(item.Info.Attributes & 2047),
                 CreationTime = item.Info.CreationTime,
                 FileName = name,
                 LastAccessTime = item.Info.LastWriteTime,
@@ -246,7 +246,7 @@ namespace Shaman.Dokan
             TotalSize = Math.Max(total, 1024);
         }
 
-        internal bool TryDecrypt()
+        internal bool TryDecompress(bool onlyEncrypted = false)
         {
             IEnumerator<FsNode> top = root.Children.Values.GetEnumerator();
             var stack = new Stack<IEnumerator<FsNode>>();
@@ -265,7 +265,7 @@ namespace Shaman.Dokan
                             top = next.Children.Values.GetEnumerator();
                         }
                     }
-                    else if (next.Info.Size > 0)
+                    else if ((!onlyEncrypted || next.Info.Encrypted) && next.Info.Size > 0)
                         return extractor.TryDecrypt(next);
                 }
             }

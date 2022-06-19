@@ -26,7 +26,7 @@ namespace SevenZip
 #endif
     {
 #if UNMANAGED
-        public delegate void GetFileData(uint index, ref ArchiveFileInfo info);
+        public delegate void GetFileData(uint index, ref ArchiveFileInfo info, bool isDir);
         private GetFileData _archiveFileData;
         public IInArchive _archive;
         private IInStream _archiveStream;
@@ -430,39 +430,43 @@ namespace SevenZip
                     var data = new PropVariant();
 
                     #region Getting archive properties
+                    if (_format == InArchiveFormat.SevenZip)
                     {
                         _archive.GetArchiveProperty(ItemPropId.Solid, ref data);
                         var solid = data.OptionalBool;
                         if (solid is bool bSolid)
                             _isSolid = bSolid;
-                        else if (_format == InArchiveFormat.Zip)
-                            _isSolid = false;
-                        else
-                            _isSolid = true;
                     }
                     #endregion
 
                     #region Getting archive items data
                     {
-                        _archiveFileData = (uint i, ref ArchiveFileInfo fileInfo) =>
+                        _archiveFileData = (uint i, ref ArchiveFileInfo fileInfo, bool isDir) =>
                         {
                             fileInfo.Index = (int)i;
                             _archive.GetProperty(i, ItemPropId.LastWriteTime, ref data);
                             fileInfo.LastWriteTime = data.EnsuredDateTime;
                             _archive.GetProperty(i, ItemPropId.CreationTime, ref data);
                             fileInfo.CreationTime = data.EnsuredDateTime;
-                            _archive.GetProperty(i, ItemPropId.Size, ref data);
-                            fileInfo.Size = data.EnsuredSize;
-                            _archive.GetProperty(i, ItemPropId.Encrypted, ref data);
-                            uint flags = data.EnsuredBool ? 1u : 0;
-                            _archive.GetProperty(i, ItemPropId.Method, ref data);
-                            if (_isSolid)
+                            _archive.GetProperty(i, ItemPropId.Attributes, ref data);
+                            var attrs = data.EnsuredUInt;
+                            attrs = isDir ? (attrs | (uint)FileAttributes.Directory) & 2047
+                                : attrs & (~(uint)FileAttributes.Directory & 2047);
+                            if (!isDir)
                             {
-                                flags |= data.isLiteralStrCopy() ? 2u : 0;
+                                _archive.GetProperty(i, ItemPropId.Size, ref data);
+                                fileInfo.Size = data.EnsuredSize;
+                                _archive.GetProperty(i, ItemPropId.Encrypted, ref data);
+                                if (data.EnsuredBool)
+                                    attrs |= (uint)FileAttributes.Encrypted;
+                                if (_isSolid)
+                                {
+                                    _archive.GetProperty(i, ItemPropId.Method, ref data);
+                                    if (data.isLiteralStrCopy())
+                                        attrs |= (uint)FileAttributes.Compressed;
+                                }
                             }
-                            else
-                                flags |= 4u;
-                            fileInfo.Flags = flags;
+                            fileInfo.Attributes = attrs;
                         };
                     }
 

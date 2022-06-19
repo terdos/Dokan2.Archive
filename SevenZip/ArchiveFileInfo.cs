@@ -22,8 +22,6 @@ namespace SevenZip
         // [CLSCompliant(false)]
         public uint Attributes;
 
-        public uint Flags;
-
         /// <summary>
         /// Gets or sets size of the file (unpacked).
         /// </summary>
@@ -54,12 +52,12 @@ namespace SevenZip
         /// <summary>
         /// Gets or sets being encrypted.
         /// </summary>
-        public bool Encrypted => (Flags & 1) != 0;
+        public bool Encrypted => (Attributes & (uint)System.IO.FileAttributes.Encrypted) != 0;
 
         /// <summary>
         /// Compression method for the file.
         /// </summary>
-        public bool IsCopy => (Flags & 2) != 0;
+        public bool IsCopy => (Attributes & (uint)System.IO.FileAttributes.Compressed) != 0;
 
         /// <summary>
         /// Determines whether the specified System.Object is equal to the current ArchiveFileInfo.

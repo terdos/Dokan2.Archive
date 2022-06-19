@@ -44,7 +44,7 @@
         private readonly PropArray _propArray;
 
         [FieldOffset(8)] private IntPtr _value;
-        [FieldOffset(8)] private uint _boolWord;
+        [FieldOffset(8)] private ushort _boolWord;
         [FieldOffset(8)] private uint _uInt32Value;
         [FieldOffset(8)] private int _int32Value;
         [FieldOffset(8)] private long _int64Value;
@@ -251,7 +251,8 @@
         public T SafeCast<T>(T def)
         {
             object obj;
-
+            if (VarType == VarEnum.VT_EMPTY)
+                return def;
             try
             {
                 obj = Object;

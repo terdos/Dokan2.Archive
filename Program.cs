@@ -104,7 +104,7 @@ namespace Shaman.Dokan
             }
             if (fs.Encrypted && !_hasReadPW)
             {
-                if (!fs.TryDecrypt())
+                if (!fs.TryDecompress(true))
                 {
                     Console.Out.Flush();
                     Console.Error.WriteLine("Error: Password is wrong!");
@@ -120,7 +120,7 @@ namespace Shaman.Dokan
                 Console.WriteLine("Warning: archive is not encrypted!");
             _password = null;
             if (!_hasReadPW)
-                fs.TryDecrypt();
+                fs.TryDecompress();
             Console.WriteLine("  Has loaded {0}", file);
             if (fs.extractor.IsSolid)
                 Console.WriteLine("Warning: mounting performance of solid archives is very poor!");
