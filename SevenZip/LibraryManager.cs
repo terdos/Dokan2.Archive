@@ -1,5 +1,6 @@
 namespace SevenZip
 {
+    using Microsoft.Win32;
     using System;
     using System.Collections.Generic;
     using System.Configuration;
@@ -37,25 +38,60 @@ namespace SevenZip
 
         private static string DetermineLibraryFilePath()
         {
-            // if (!string.IsNullOrEmpty(ConfigurationManager.AppSettings["7zLocation"]))
-            // {
-            //     return ConfigurationManager.AppSettings["7zLocation"];
-            // }
-
             var dir = Assembly.GetExecutingAssembly().Location;
-            if (string.IsNullOrEmpty(dir)) 
+            if (!string.IsNullOrEmpty(dir))
             {
-                return null;
+                dir = Path.GetDirectoryName(dir);
+                if (Environment.Is64BitProcess)
+                {
+                    var file2 = Path.Combine(dir, "7z64.dll");
+                    if (File.Exists(file2))
+                        return file2;
+                }
+                var file = Path.Combine(dir, "7z.dll");
+                if (File.Exists(file))
+                    return file;
             }
-
-            dir = Path.GetDirectoryName(dir);
-            if (Environment.Is64BitProcess)
+            RegistryKey key1 = null, key2 = null, key3 = null;
+            object def = null;
+            try
             {
-                var file2 = Path.Combine(dir, "7z64.dll");
-                if (File.Exists(file2))
-                    return file2;
+                key1 = Registry.ClassesRoot.OpenSubKey(".7z");
+                var key = key1;
+                def = key?.GetValue("");
+                key2 = def is string def1 && def1.Length > 0 ? Registry.ClassesRoot.OpenSubKey(def1) : null;
+                key = key2 ?? key1;
+                key3 = key?.OpenSubKey("DefaultIcon");
+                def = key3?.GetValue("");
             }
-            return Path.Combine(dir, "7z.dll");
+            catch (Exception) { }
+            finally
+            {
+                key3?.Dispose();
+                key2?.Dispose();
+                key1?.Dispose();
+            }
+            if (def is string iconPath && iconPath.Length > 0)
+            {
+                var ind = iconPath.LastIndexOf(',');
+                var file = ind >= 0 ? iconPath.Substring(0, ind) : iconPath;
+                file = file.Length > 0 && File.Exists(file) ? file : "";
+                if (file.Length == 0 && ind != 0)
+                {
+                    var ind2 = iconPath.IndexOf(',');
+                    if (ind2 != ind && ind2 > 0)
+                    {
+                        file = iconPath.Substring(0, ind2);
+                        file = File.Exists(file) ? file : "";
+                    }
+                }
+                if (file.Length > 0)
+                {
+                    var file2 = Path.Combine(Path.GetDirectoryName(file), "7z.dll");
+                    return file2 != file && File.Exists(file2) ? file2 : file;
+                }
+            }
+            return null;
         }
 
         /// <summary>
@@ -69,7 +105,6 @@ namespace SevenZip
         private static Dictionary<object, Dictionary<InArchiveFormat, IInArchive>> _inArchives;
         private static Dictionary<object, Dictionary<OutArchiveFormat, IOutArchive>> _outArchives;
         private static int _totalUsers;
-        private static bool? _modifyCapable;
 
         private static void InitUserInFormat(object user, InArchiveFormat format)
         {
