@@ -1,5 +1,6 @@
 namespace SevenZip
 {
+    using Shaman.Dokan;
     using System;
     using System.Collections.Generic;
     using System.Globalization;
@@ -62,22 +63,7 @@ namespace SevenZip
         /// <param name="filesCount">The archive files count</param>
         /// <param name="fileIndex">The file index for the stream</param>
         /// <param name="extractor">The owner of the callback</param>
-        public ArchiveExtractCallback(IInArchive archive, Stream stream, int filesCount, uint fileIndex, SevenZipExtractor extractor)
-        {
-            Init(archive, stream, filesCount, fileIndex, extractor);
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the ArchiveExtractCallback class
-        /// </summary>
-        /// <param name="archive">IInArchive interface for the archive</param>
-        /// <param name="stream">The stream where files are to be unpacked to</param>
-        /// <param name="filesCount">The archive files count</param>
-        /// <param name="fileIndex">The file index for the stream</param>
-        /// <param name="password">Password for the archive</param>
-        /// <param name="extractor">The owner of the callback</param>
-        public ArchiveExtractCallback(IInArchive archive, Stream stream, int filesCount, uint fileIndex, string password, SevenZipExtractor extractor)
-            : base()
+        public ArchiveExtractCallback(IInArchive archive, MemoryStreamInternal stream, int filesCount, uint fileIndex, SevenZipExtractor extractor)
         {
             Init(archive, stream, filesCount, fileIndex, extractor);
         }
@@ -94,10 +80,11 @@ namespace SevenZip
             }
         }
 
-        private void Init(IInArchive archive, Stream stream, int filesCount, uint fileIndex, SevenZipExtractor extractor)
+        private void Init(IInArchive archive, MemoryStreamInternal stream
+            , int filesCount, uint fileIndex, SevenZipExtractor extractor)
         {
             CommonInit(archive, filesCount, extractor);
-            _fileStream = new OutStreamWrapper(stream, false);
+            _fileStream = stream != null ? new OutStreamWrapper(stream, false) : null;
             //_fileStream.BytesWritten += IntEventArgsHandler;
             _fileIndex = fileIndex;
         }
@@ -205,7 +192,7 @@ namespace SevenZip
 
                     if (index == _fileIndex)
                     {
-                        outStream  = _fileStream;
+                        outStream  = _fileStream != null ? (ISequentialOutStream) _fileStream : _fakeStream;
                         _fileIndex = null;
                     }
                     else
@@ -363,9 +350,9 @@ namespace SevenZip
             return string.Join(new string(Path.DirectorySeparatorChar, 1), splitFileName.ToArray());
         }
 
-        internal void StopStream()
+        internal void StopFakeStream()
         {
-            _fileStream.ResultCode = _fakeStream.ResultCode = -88;
+            _fakeStream.ResultCode = -88;
         }
     }
 #endif

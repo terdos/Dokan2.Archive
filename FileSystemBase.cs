@@ -15,7 +15,7 @@ using SevenZip;
 
 namespace Shaman.Dokan
 {
-    public abstract class FileSystemBase : IDokanOperations
+    public abstract class FileSystemBase : IDokanOperationsUnsafe
     {
         protected const FileAccess DataAccess = FileAccess.ReadData | FileAccess.WriteData | FileAccess.AppendData |
                                          FileAccess.Execute |
@@ -39,7 +39,7 @@ namespace Shaman.Dokan
         public abstract NtStatus SetFileSecurity(string fileName, FileSystemSecurity security, AccessControlSections sections, IDokanFileInfo info);
         public abstract NtStatus SetFileTime(string fileName, DateTime? creationTime, DateTime? lastAccessTime, DateTime? lastWriteTime, IDokanFileInfo info);
         public abstract NtStatus WriteFile(string fileName, byte[] buffer, out int bytesWritten, long offset, IDokanFileInfo info);
-
+        public abstract NtStatus WriteFile(string fileName, IntPtr buffer, uint bufferLength, out int bytesWritten, long offset, IDokanFileInfo info);
 
 
         public virtual NtStatus Mounted(string mountPoint, IDokanFileInfo info)
@@ -291,6 +291,24 @@ namespace Shaman.Dokan
             }
         }
 
+        public virtual NtStatus ReadFile(string fileName, IntPtr buffer, uint bufferLength
+            , out int bytesRead, long offset, IDokanFileInfo info)
+        {
+            var stream = (ConsumerStream)info.Context;
+            lock (stream)
+            {
+                stream.Position = offset;
+                bytesRead = 0;
+                while (bytesRead != bufferLength)
+                {
+                    var b = stream.Read(buffer, bytesRead, (int) bufferLength - bytesRead);
+                    if (b == 0) break;
+                    bytesRead += b;
+                }
+                return NtStatus.Success;
+            }
+        }
+
 
         protected static bool IsBadName(string fileName)
         {
@@ -325,6 +343,8 @@ namespace Shaman.Dokan
         {
             public ArchiveFileInfo Info;
             public Dictionary<string, FsNode> Children;
+
+            public override int GetHashCode() { return Info.Index; }
         }
 
         public static FsNode NewDirectory()
@@ -419,5 +439,6 @@ namespace Shaman.Dokan
             var dir = NewDirectory();
             return dict[path] = parent.Children[filename] = dir;
         }
+
     }
 }

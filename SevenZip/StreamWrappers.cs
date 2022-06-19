@@ -1,5 +1,6 @@
 namespace SevenZip
 {
+    using Shaman.Dokan;
     using System;
     using System.Collections.Generic;
     using System.Globalization;
@@ -24,47 +25,20 @@ namespace SevenZip
     internal class StreamWrapper : DisposeVariableWrapper, IDisposable
     {
         /// <summary>
-        /// File name associated with the stream (for date fix)
-        /// </summary>
-        private readonly string _fileName;
-
-        private readonly DateTime _fileTime;
-
-        /// <summary>
         /// Worker stream for reading, writing and seeking.
         /// </summary>
-        private Stream _baseStream;
-
-        /// <summary>
-        /// Initializes a new instance of the StreamWrapper class
-        /// </summary>
-        /// <param name="baseStream">Worker stream for reading, writing and seeking</param>
-        /// <param name="fileName">File name associated with the stream (for attributes fix)</param>
-        /// <param name="time">File last write time (for attributes fix)</param>
-        /// <param name="disposeStream">Indicates whether to dispose the baseStream</param>
-        protected StreamWrapper(Stream baseStream, string fileName, DateTime time, bool disposeStream) 
-            : base(disposeStream)
-        {
-            _baseStream = baseStream;
-            _fileName = fileName;
-            _fileTime = time;
-        }
+        protected IDisposable _baseStream;
 
         /// <summary>
         /// Initializes a new instance of the StreamWrapper class
         /// </summary>
         /// <param name="baseStream">Worker stream for reading, writing and seeking</param>
         /// <param name="disposeStream">Indicates whether to dispose the baseStream</param>
-        protected StreamWrapper(Stream baseStream, bool disposeStream)
+        protected StreamWrapper(IDisposable baseStream, bool disposeStream)
             : base(disposeStream)
         {
             _baseStream = baseStream;            
         }
-
-        /// <summary>
-        /// Gets the worker stream for reading, writing and seeking.
-        /// </summary>
-        protected Stream BaseStream => _baseStream;
 
         #region IDisposable Members
 
@@ -83,33 +57,10 @@ namespace SevenZip
                 _baseStream = null;                                
             }    
             
-            if (!String.IsNullOrEmpty(_fileName) && File.Exists(_fileName))
-            {
-                try
-                {
-                    File.SetLastWriteTime(_fileName, _fileTime);
-                    File.SetLastAccessTime(_fileName, _fileTime);
-                    File.SetCreationTime(_fileName, _fileTime);
-                }
-                catch (ArgumentOutOfRangeException) {}
-            }
-
             GC.SuppressFinalize(this);
         }
 
         #endregion
-
-        public virtual void Seek(long offset, SeekOrigin seekOrigin, IntPtr newPosition)
-        {
-            if (BaseStream != null)
-            {
-                long position = BaseStream.Seek(offset, seekOrigin);
-                if (newPosition != IntPtr.Zero)
-                {
-                    Marshal.WriteInt64(newPosition, position);
-                }
-            }            
-        }
     }
 
     /// <summary>
@@ -117,6 +68,7 @@ namespace SevenZip
     /// </summary>
     internal sealed class InStreamWrapper : StreamWrapper, ISequentialInStream, IInStream
     {
+        private Stream BaseStream => (Stream)_baseStream;
         /// <summary>
         /// Initializes a new instance of the InStreamWrapper class.
         /// </summary>
@@ -138,25 +90,24 @@ namespace SevenZip
             if (BaseStream != null)
             {
                 readCount = BaseStream.Read(data, 0, (int) size);
-                if (readCount > 0)
-                {
-                    OnBytesRead(new IntEventArgs(readCount));
-                }
             }
             return readCount;
         }
 
+        public void Seek(long offset, SeekOrigin seekOrigin, IntPtr newPosition)
+        {
+            if (BaseStream != null)
+            {
+                long position = BaseStream.Seek(offset, seekOrigin);
+                if (newPosition != IntPtr.Zero)
+                {
+                    Marshal.WriteInt64(newPosition, position);
+                }
+            }
+        }
+
         #endregion
 
-        /// <summary>
-        /// Occurs when IntEventArgs.Value bytes were read from the source.
-        /// </summary>
-        public event EventHandler<IntEventArgs> BytesRead;
-
-        private void OnBytesRead(IntEventArgs e)
-        {
-            BytesRead?.Invoke(this, e);
-        }
     }
 
     /// <summary>
@@ -167,31 +118,28 @@ namespace SevenZip
         public int ResultCode = 0;
 
         /// <summary>
-        /// Initializes a new instance of the OutStreamWrapper class
+        /// Gets the worker stream for reading, writing and seeking.
         /// </summary>
-        /// <param name="baseStream">Stream for writing data</param>
-        /// <param name="fileName">File name (for attributes fix)</param>
-        /// <param name="time">Time of the file creation (for attributes fix)</param>
-        /// <param name="disposeStream">Indicates whether to dispose the baseStream</param>
-        public OutStreamWrapper(Stream baseStream, string fileName, DateTime time, bool disposeStream) :
-            base(baseStream, fileName, time, disposeStream) {}
+        private MemoryStreamInternal BaseStream => (MemoryStreamInternal)_baseStream;
 
         /// <summary>
         /// Initializes a new instance of the OutStreamWrapper class
         /// </summary>
         /// <param name="baseStream">Stream for writing data</param>
         /// <param name="disposeStream">Indicates whether to dispose the baseStream</param>
-        public OutStreamWrapper(Stream baseStream, bool disposeStream) :
+        public OutStreamWrapper(MemoryStreamInternal baseStream, bool disposeStream) :
             base(baseStream, disposeStream) {}
 
         #region IOutStream Members
 
         public int SetSize(long newSize)
         {
-            BaseStream.SetLength(newSize);
             return 0;
         }
 
+        public void Seek(long offset, SeekOrigin seekOrigin, IntPtr newPosition)
+        {
+        }
         #endregion
 
         #region ISequentialOutStream Members
@@ -203,28 +151,17 @@ namespace SevenZip
         /// <param name="size">Array size</param>
         /// <param name="processedSize">Count of written bytes</param>
         /// <returns>Zero if Ok</returns>
-        public int Write(byte[] data, uint size, IntPtr processedSize)
+        public int Write(IntPtr data, uint size, IntPtr processedSize)
         {
             BaseStream.Write(data, 0, (int) size);
             if (processedSize != IntPtr.Zero)
             {
                 Marshal.WriteInt32(processedSize, (int) size);
             }
-            OnBytesWritten(new IntEventArgs((int) size));
             return ResultCode;
         }
 
         #endregion
-
-        /// <summary>
-        /// Occurs when IntEventArgs.Value bytes were written.
-        /// </summary>
-        public event EventHandler<IntEventArgs> BytesWritten;
-
-        private void OnBytesWritten(IntEventArgs e)
-        {
-            BytesWritten?.Invoke(this, e);
-        }
     }
 
     /// <summary>
@@ -293,12 +230,12 @@ namespace SevenZip
 
         private int StreamNumberByOffset(long offset)
         {
-            foreach (int number in StreamOffsets.Keys)
+            foreach (var pair in StreamOffsets)
             {
-                if (StreamOffsets[number].Key <= offset &&
-                    StreamOffsets[number].Value >= offset)
+                if (pair.Value.Key <= offset &&
+                    pair.Value.Value >= offset)
                 {
-                    return number;
+                    return pair.Key;
                 }
             }
             return -1;
@@ -389,80 +326,6 @@ namespace SevenZip
         #endregion
     }
 
-    /// <summary>
-    /// IOutStream wrapper used in multi volume stream write operations.
-    /// </summary>
-    internal sealed class OutMultiStreamWrapper : MultiStreamWrapper, ISequentialOutStream, IOutStream
-    {
-        private readonly string _archiveName;
-        private readonly long _volumeSize;
-        private long _overallLength;
-
-        /// <summary>
-        /// Initializes a new instance of the OutMultiStreamWrapper class.
-        /// </summary>
-        /// <param name="archiveName">The archive name.</param>
-        /// <param name="volumeSize">The volume size.</param>
-        public OutMultiStreamWrapper(string archiveName, long volumeSize) :
-            base(true)
-        {
-            _archiveName = archiveName;
-            _volumeSize = volumeSize;
-            CurrentStream = -1;
-            NewVolumeStream();
-        }
-
-        #region IOutStream Members
-
-        public int SetSize(long newSize)
-        {
-            return 0;
-        }
-
-        #endregion
-
-        #region ISequentialOutStream Members
-
-        public int Write(byte[] data, uint size, IntPtr processedSize)
-        {
-            int offset = 0;
-            var originalSize = (int) size;
-            Position += size;
-            _overallLength = Math.Max(Position + 1, _overallLength);
-            while (size > _volumeSize - Streams[CurrentStream].Position)
-            {
-                var count = (int) (_volumeSize - Streams[CurrentStream].Position);
-                Streams[CurrentStream].Write(data, offset, count);
-                size -= (uint) count;
-                offset += count;
-                NewVolumeStream();
-            }
-            Streams[CurrentStream].Write(data, offset, (int) size);
-            if (processedSize != IntPtr.Zero)
-            {
-                Marshal.WriteInt32(processedSize, originalSize);
-            }
-            return 0;
-        }
-
-        #endregion
-
-        public override void Dispose()
-        {
-            int lastIndex = Streams.Count - 1;
-            Streams[lastIndex].SetLength(lastIndex > 0? Streams[lastIndex].Position : _overallLength);
-            base.Dispose();
-        }
-
-        private void NewVolumeStream()
-        {
-            CurrentStream++;
-            Streams.Add(File.Create(_archiveName + VolumeNumber(CurrentStream + 1)));
-            Streams[CurrentStream].SetLength(_volumeSize);
-            StreamOffsets.Add(CurrentStream, new KeyValuePair<long, long>(0, _volumeSize - 1));
-        }
-    }
-
     internal sealed class FakeOutStreamWrapper : ISequentialOutStream, IDisposable
     {
         public int ResultCode = 0;
@@ -485,9 +348,8 @@ namespace SevenZip
         /// <param name="size">Array size</param>
         /// <param name="processedSize">Count of written bytes</param>
         /// <returns>Zero if Ok</returns>
-        public int Write(byte[] data, uint size, IntPtr processedSize)
+        public int Write(IntPtr data, uint size, IntPtr processedSize)
         {
-            OnBytesWritten(new IntEventArgs((int) size));
             if (processedSize != IntPtr.Zero)
             {
                 Marshal.WriteInt32(processedSize, (int) size);
@@ -496,16 +358,6 @@ namespace SevenZip
         }
 
         #endregion
-
-        /// <summary>
-        /// Occurs when IntEventArgs.Value bytes were written
-        /// </summary>
-        public event EventHandler<IntEventArgs> BytesWritten;
-
-        private void OnBytesWritten(IntEventArgs e)
-        {
-            BytesWritten?.Invoke(this, e);
-        }
     }
 #endif
 }

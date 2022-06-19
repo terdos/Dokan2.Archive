@@ -1020,9 +1020,7 @@
         /// You must call Write function in loop, if you need exact amount of data.
         /// </remarks>
         [PreserveSig]
-        int Write(
-            [In, MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 1)] byte[] data,
-            uint size, IntPtr processedSize);
+        int Write(IntPtr data, uint size, IntPtr processedSize);
     }
 
     /// <summary>
@@ -1069,10 +1067,7 @@
         /// <param name="processedSize">Processed size</param>
         /// <returns>Zero if Ok</returns>
         [PreserveSig]
-        int Write(
-            [In, MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 1)] byte[] data,
-            uint size,
-            IntPtr processedSize);
+        int Write(IntPtr data, uint size, IntPtr processedSize);
 
         /// <summary>
         /// Seek routine

@@ -1,53 +1,55 @@
 ﻿using System;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using static Shaman.Dokan.FileSystemBase;
 
 namespace Shaman.Dokan
 {
-    public class MemoryStreamManager
+    public sealed class MemoryStreamManager
     {
-        private Action<FsNode, Stream> write;
+        private Action<FsNode, MemoryStreamInternal> write;
         public readonly FsNode Item;
         public long Length;
 
         private MemoryStreamInternal ms;
 
         private volatile bool completed;
-        public MemoryStreamManager(Action<FsNode, Stream> load, FsNode item)
+        public MemoryStreamManager(Action<FsNode, MemoryStreamInternal> load, FsNode item)
         {
             write = load;
             Item = item;
             Length = (long)item.Info.Size;
         }
 
-        public Stream CreateStream()
+        public ConsumerStream CreateStream()
         {
             return new ConsumerStream(this);
         }
 
-        internal int Read(long position, byte[] buffer, int offset, int count)
+        internal int Read(long position, IntPtr buffer, int offset, int count)
         {
-            if (exception != null) throw exception;
+            if (exception != null) throw new Exception(exception);
             var waitTime = 8;
             while (ms.Length < position + count && !completed)
             {
                 Interlocked.MemoryBarrier();
                 Thread.Sleep(waitTime);
                 waitTime *= 2;
-                if (exception != null) throw exception;
+                if (exception != null) throw new Exception(exception);
             }
 
             lock (ms)
             {
                 var data = ms.data;
-                var tocopy = Math.Max((int)Math.Min(count, ms.Length - position), 0);
+                var tocopy = (int)Math.Min(count, ms.Length - position);
                 if (position > ms.length) return 0;
-                Buffer.BlockCopy(data, (int)position, buffer, offset, tocopy);
+                if (tocopy <= 0)
+                    return 0;
+                Marshal.Copy(data, (int)position, buffer + offset, tocopy);
                 return tocopy;
             }
-
         }
         private int usageToken;
         internal void DecrementUsage()
@@ -57,18 +59,25 @@ namespace Shaman.Dokan
                 users--;
                 if (users == 0)
                 {
-                    if (MemoryStreamCache.Total >= 50)
+                    if (MemoryStreamCache.TotalActive >= 20)
                     {
-                        isdisposed = true;
-                        this.ms.Dispose();
-                        MemoryStreamCache.DeleteItem(Item, this);
-                        return;
+                        MemoryStreamCache.DoGC(1000);
+                        if (MemoryStreamCache.TotalActive >= 30)
+                        {
+                            isdisposed = true;
+                            this.ms.Dispose();
+                            MemoryStreamCache.DeleteItem(Item, this);
+                            if (SevenZipProgram.DebugSelf)
+                                Console.WriteLine("Release reading buffer for 0x{0:X} at once"
+                                    , Item.GetHashCode());
+                            return;
+                        }
                     }
-                    var tok = this.usageToken; 
-                    Timer timer = null;
-                    timer = new System.Threading.Timer(dummy =>
+                    var tok = this.usageToken;
+                    var timeout = MemoryStreamCache.TotalActive >= 12 ? 3000 : MaxKeepFileInMemoryTimeMs;
+                    MemoryStreamCache.DelayGC(timeout, () =>
                     {
-                        timer.Dispose();
+                        if (tok != this.usageToken) return;
                         lock (this)
                         {
                             if (tok == this.usageToken)
@@ -76,14 +85,16 @@ namespace Shaman.Dokan
                                 isdisposed = true;
                                 this.ms.Dispose();
                                 MemoryStreamCache.DeleteItem(Item, this);
+                                if (SevenZipProgram.DebugSelf)
+                                    Console.WriteLine("Release reading buffer for 0x{0:X} and there're {1} left"
+                                        , Item.GetHashCode(), MemoryStreamCache.TotalActive);
                             }
                         }
-                    }, null, MemoryStreamCache.Total > 16 ? 3000 :
-                    Configuration_KeepFileInMemoryTimeMs, Timeout.Infinite);
+                    });
                 }
             }
         }
-        private volatile Exception exception;
+        private volatile string exception;
         internal void IncrementUsage()
         {
             lock (this)
@@ -97,17 +108,27 @@ namespace Shaman.Dokan
                     {
                         try
                         {
+                            ms.DoAlloc();
+                            if (SevenZipProgram.DebugSelf)
+                                Console.WriteLine("Now extract {0} bytes from 0x{1:X} in Worker #{2:X}"
+                                    , Length, Item.GetHashCode(), Thread.CurrentThread.ManagedThreadId);
                             write(Item, ms);
-                            if (Length != ms.length)
-                                throw new Exception("Promised length was different from actual length.");
-                            this.Length = ms.length;
                         }
                         catch (Exception ex)
                         {
-                            this.exception = ex;
+                            // if isdisposed, then `ex` is because the Dokan2 output stream was closed
+                            this.exception = ex.GetType().Name + ": " + ex.Message;
+                            if (SevenZipProgram.VerboseOutput && !isdisposed)
+                                Console.WriteLine("Error: Can not extract 0x{0:X}: {1}", Item.GetHashCode()
+                                    , this.exception);
                         }
                         finally
                         {
+                            if (SevenZipProgram.DebugSelf && exception == null)
+                                Console.WriteLine("Got {0} {1} bytes from 0x{2:X}"
+                                    , ms.length == Length ? "all of" : "only " + ms.length + " in"
+                                    , Length, Item.GetHashCode());
+
                             this.completed = true;
                         }
                     });
@@ -118,12 +139,12 @@ namespace Shaman.Dokan
         private int users;
         private bool isdisposed;
         //[Configuration]
-        private static int Configuration_KeepFileInMemoryTimeMs = 30000;
+        public const int MaxKeepFileInMemoryTimeMs = 30000;
 
         public bool IsDisposed => isdisposed;
     }
 
-    internal class ConsumerStream : Stream
+    public sealed class ConsumerStream : Stream
     {
         private MemoryStreamManager memoryStreamManager;
         private long position;
@@ -162,6 +183,11 @@ namespace Shaman.Dokan
         }
 
         public override int Read(byte[] buffer, int offset, int count)
+        {
+            throw new NotSupportedException();
+        }
+
+        public int Read(IntPtr buffer, int offset, int count)
         {
             if (released != 0) return 0;
             var r = memoryStreamManager.Read(position, buffer, offset, count);

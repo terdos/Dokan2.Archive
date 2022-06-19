@@ -9,6 +9,7 @@ namespace SevenZip
     using System.Linq;
 
     using SevenZip.Sdk.Compression.Lzma;
+    using Shaman.Dokan;
     using static Shaman.Dokan.FileSystemBase;
 
     /// <summary>
@@ -477,7 +478,7 @@ namespace SevenZip
         /// <param name="index">The file index</param>
         /// <param name="filesCount">The number of files to be extracted</param>
         /// <returns>The ArchiveExtractCallback callback</returns>
-        private ArchiveExtractCallback GetArchiveExtractCallback(Stream stream, uint index, int filesCount)
+        private ArchiveExtractCallback GetArchiveExtractCallback(MemoryStreamInternal stream, uint index, int filesCount)
         {
             var aec = new ArchiveExtractCallback(_archive, stream, filesCount, index, this);
             ArchiveExtractCallbackCommonInit(aec);
@@ -705,7 +706,7 @@ namespace SevenZip
         /// </summary>
         /// <param name="index">Index in the archive file table.</param>
         /// <param name="stream">The stream where the file is to be unpacked.</param>
-        public void ExtractFile(FsNode file, Stream stream)
+        public void ExtractFile(FsNode file, MemoryStreamInternal stream)
         {
             DisposedCheck();
             ClearExceptions();
@@ -832,10 +833,10 @@ namespace SevenZip
             var index = file.Info.Index;
             var indexes = new[] { (uint)index };
 
-            using (var aec = GetArchiveExtractCallback(Stream.Null, (uint)index, indexes.Length))
+            using (var aec = GetArchiveExtractCallback(null, (uint)index, indexes.Length))
                 //try
                 {
-                    aec.StopStream();
+                    aec.StopFakeStream();
                     var res = _archive.Extract(indexes, (uint)indexes.Length, 0, aec);
                     if (aec.HasExceptions || res != 0 && res != -88)
                         return false;

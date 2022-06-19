@@ -5,55 +5,66 @@ using System.Threading.Tasks;
 using SevenZip;
 using System.IO;
 using DokanNet;
+using System.Threading;
 
 namespace Shaman.Dokan
 {
     public class SevenZipProgram
     {
-        delegate int ExtractArg(string argName, out string value);
+        delegate int ExtractArg(string argName, out string value, string argName2 = null);
 
         private static string _password = null;
         private static bool _hasReadPW = false;
 
         public static bool VerboseOutput = false;
+        public static bool DebugSelf = false;
         public static bool DebugDokan = false;
 
         static int Main(string[] args)
         {
-            ExtractArg extractArg = (string argName, out string value) =>
+            var dashTwo = Array.FindIndex(args, i => i == "--");
+            dashTwo = dashTwo >= 0 ? dashTwo : args.Length;
+            ExtractArg extractArg = (string argName, out string value, string argName2) =>
             {
-                var index = Array.FindIndex(args, i => i.StartsWith(argName));
+                var index = Array.FindIndex(args
+                    , i => i.StartsWith(argName) || argName2 != null && i.StartsWith(argName2));
                 value = null;
-                if (index < 0) { }
-                else if (args[index].Length > argName.Length)
+                if (index < 0 || index >= dashTwo) { }
+                else if (argName.Length == 3 && args[index].Length > argName.Length)
                 {
                     value = args[index].Substring(argName.Length);
                     value = value.StartsWith("=") ? value.Substring(1) : value;
                     args = args.Take(index).Concat(args.Skip(index + 1)).ToArray();
+                    dashTwo--;
                 }
                 else if (index < args.Length - 1)
                 {
                     value = args[index + 1];
                     args = args.Take(index).Concat(args.Skip(index + 2)).ToArray();
+                    dashTwo -= 2;
                 }
                 else
+                {
                     args = args.Take(index).ToArray();
+                    dashTwo--;
+                }
                 return index;
             };
-            var labelIndex = extractArg("-l", out var labelName);
-            var passwordIndex = extractArg("-p", out _password);
+            extractArg("-l", out var labelName);
+            extractArg("-p", out _password);
             string[] extractorFlags = new string[0];
-            while (extractArg("-c", out var extractorFlag) >= 0)
+            while (extractArg("-c", out var extractorFlag, "-O") >= 0)
                 extractorFlags = extractorFlags.Concat((extractorFlag ?? "").Split(',', ';')).ToArray();
-            while (extractArg("-O", out var extractorFlag) >= 0)
-                extractorFlags = extractorFlags.Concat((extractorFlag ?? "").Split(',', ';')).ToArray();
-            var opts = " " + string.Join(" ", args.Where(i => i.Length > 0 && i[0] == '-'));
-            args = args.Where(i => i.Length == 0 || i[0] != '-').ToArray();
-            if (args.Length == 0 || opts.Contains(" -h") || opts.Contains(" --help"))
+            var parallelIndex = extractArg("-j", out var parallelNum);
+
+            var opts = " " + string.Join(" ", args.Take(dashTwo).Where(i => i.Length > 1 && i[0] == '-')
+                .Select(i => i[1] != '-' && i.Length > 2 ? "-" + string.Join(" -", i.Skip(1)) : i));
+            args = (dashTwo < args.Length ? args.Skip(dashTwo) : args.Where(i => i.Length == 0 || i[0] != '-')).ToArray();
+            if (args.Length == 0 || opts.Contains("-h"))
             {
-                Console.WriteLine("Usage: Dokan2.Archive.exe [-aAdeotv]\n" +
+                Console.WriteLine("Usage: Dokan2.Archive.exe [-aAdDeotv]\n" +
                     "            archive-file Drive: [root-folder]\n" +
-                    "            [-l label] [-c/-O extractor-flags] [-p [password]]");
+                    "            [-l label] [-j parallel-tasks] [-c/-O extractor-flags] [-p [password]]");
                 return 0;
             }
 
@@ -69,7 +80,7 @@ namespace Shaman.Dokan
                 mountPoint = mountPoint.Substring(0, 1);
             bool isDrive = mountPoint != null && mountPoint.Length == 1
                 && 'a' <= mountPoint.ToLower()[0] && mountPoint.ToLower()[0] <= 'z';
-            bool autoDrive = opts.Contains(" -a") || opts.Contains(" --auto") || string.IsNullOrEmpty(mountPoint);
+            bool autoDrive = opts.Contains("-a") || string.IsNullOrEmpty(mountPoint);
             if (string.IsNullOrEmpty(mountPoint))
             {
                 mountPoint = "X";
@@ -112,8 +123,9 @@ namespace Shaman.Dokan
                     Console.WriteLine("Select an archive in {0}", file);
                 }
             }
-            DebugDokan = opts.Contains(" -d");
-            VerboseOutput = DebugDokan || opts.Contains(" -v");
+            DebugDokan = opts.Contains("-D");
+            DebugSelf = opts.Contains("-d") || DebugSelf;
+            VerboseOutput = DebugSelf || opts.Contains("-v");
 
             SevenZipFs fs;
             try
@@ -128,6 +140,15 @@ namespace Shaman.Dokan
                 else
                     Console.Error.WriteLine("Error: {0}", ex.ToString());
                 return 2;
+            }
+            var kProcessors = Environment.ProcessorCount;
+            {
+                extractorFlags = new string[]
+                {
+                    "crc0", "mt" + (kProcessors >= 8 ? 4 : kProcessors >= 4 ? 2 : 1)
+                }.Concat(extractorFlags.Where(i => i.Length > 0)).ToArray();
+                fs.extractor.SetProperties(extractorFlags);
+                extractorFlags = null;
             }
             if (fs.Encrypted && !_hasReadPW)
             {
@@ -148,15 +169,6 @@ namespace Shaman.Dokan
             _password = null;
             if (!_hasReadPW)
                 fs.TryDecompress();
-            {
-                var mt = Environment.ProcessorCount;
-                extractorFlags = new string[]
-                {
-                    "crc0", "mt" + (mt >= 8 ? 4 : mt >= 4 ? 2 : 1)
-                }.Concat(extractorFlags.Where(i => i.Length > 0)).ToArray();
-                fs.extractor.SetProperties(extractorFlags);
-                extractorFlags = null;
-            }
             Console.WriteLine("  Has loaded {0}", file);
             if (rootFolder != null && rootFolder == ":auto" && fs.RootFolder != null)
             {
@@ -164,13 +176,20 @@ namespace Shaman.Dokan
             }
             if (fs.extractor.IsSolid)
                 Console.WriteLine("Warning: mounting performance of solid archives is very poor!");
-            if (opts.Contains(" -e")) // test extraction only
+            if (opts.Contains("-e")) // test extraction only
             {
                 Console.WriteLine("  Test passed.");
                 return 0;
             }
 
-            bool doesOpen = opts.Contains(" -o") || opts.Contains(" --open");
+            int maxTasks = 0;
+            if (string.IsNullOrEmpty(parallelNum))
+                int.TryParse(parallelNum, out maxTasks);
+            ThreadPool.GetMaxThreads(out int oldWorkerThreads, out int oldThreads2); ;
+            ThreadPool.SetMaxThreads(maxTasks > 0 && maxTasks < kProcessors ? maxTasks
+                : parallelIndex >= 0 ? kProcessors : Math.Min(4, kProcessors), oldThreads2);
+
+            bool doesOpen = opts.Contains("-o");
             bool testOnly = opts.Contains(" -t") || opts.Contains(" --dry");
             if (!string.IsNullOrWhiteSpace(labelName))
                 fs.VolumeLabel = labelName.Trim();
@@ -192,8 +211,9 @@ namespace Shaman.Dokan
                     {
                         Console.WriteLine("  Test passed.");
                         Environment.Exit(0);
+                        return;
                     }
-                    else if (doesOpen)
+                    if (doesOpen)
                         Process.Start(drive.EndsWith("\\") ? drive : drive + "\\");
                 }
                 else

@@ -2,69 +2,50 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 
 namespace Shaman.Dokan
 {
-    class MemoryStreamInternal : Stream
+    public sealed class MemoryStreamInternal: IDisposable
     {
         public MemoryStreamInternal(int length)
         {
-            data = new byte[length];
-        }
-        public override bool CanRead => false;
-
-        public override bool CanSeek => false;
-
-        public override bool CanWrite => true;
-
-        public override long Length => length;
-
-        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
-
-        public override void Flush()
-        {
+            this.capacity = length;
         }
 
-        public override int Read(byte[] buffer, int offset, int count)
-        {
-            throw new NotSupportedException();
-        }
+        public long Length => length;
 
-        public override long Seek(long offset, SeekOrigin origin)
-        {
-            throw new NotSupportedException();
-        }
-
-        public override void SetLength(long value)
-        {
-            throw new NotSupportedException();
-        }
-
+        public readonly int capacity;
         public volatile int length;
-        public volatile byte[] data;
+        internal volatile byte[] data;
 
-        public override void Write(byte[] buffer, int offset, int count)
+        public void Write(IntPtr buffer, int offset, int count)
         {
             lock (this)
             {
                 var newlength = length + count;
                 if (newlength > data.Length)
                 {
-                    var newdata = new byte[Math.Max(newlength, data.Length * 2)];
+                    var newdata = new byte[Math.Max(newlength, (long)(data.Length * 1.414))];
                     Buffer.BlockCopy(data, 0, newdata, 0, length);
                     data = newdata;
-                }
-
-                Buffer.BlockCopy(buffer, offset, data, length, count);
+                };
+                Marshal.Copy(buffer + offset, data, length, count);
                 length = newlength;
             }
         }
 
-        protected override void Dispose(bool disposing)
+        internal void DoAlloc()
+        {
+            data = new byte[capacity];
+        }
+
+        public void Dispose()
         {
             data = null;
         }
+
     }
 }

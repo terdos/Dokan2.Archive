@@ -33,9 +33,9 @@ namespace Shaman.Dokan
             cache = new MemoryStreamCache(ExtractFile);
         }
 
-        public void ExtractFile(FsNode item, Stream stream)
+        public void ExtractFile(FsNode item, MemoryStreamInternal stream)
         {
-            lock (readerLock)
+            //lock (readerLock)
             {
                 extractor.ExtractFile(item, stream);
             }
@@ -70,7 +70,6 @@ namespace Shaman.Dokan
             {
                 if ((access & (FileAccess.ReadData | FileAccess.GenericRead)) != 0)
                 {
-                    //Console.WriteLine("ReadData: " + fileName);
                     info.Context = cache.OpenStream(item);
 
                 }
@@ -161,8 +160,11 @@ namespace Shaman.Dokan
                 }
                 return true;
             }
-            if (newRootFolder[0] == ':') { return true; }
-            var item = GetNode(root, newRootFolder, out var name);
+            if (newRootFolder.Length == 0 || newRootFolder[0] == ':') { return true; }
+            var usableName = newRootFolder[0] == '\\' ? newRootFolder.Substring(1) : newRootFolder;
+            if (usableName.Length >= 2 && usableName[1] == ':')
+                usableName = usableName[0] + "\\" + usableName.Substring(2);
+            var item = GetNode(root, usableName, out var name);
             if (item == null) { return false; }
             if (item == root) { return true; }
             if (item.Info.IsDirectory)

@@ -13,6 +13,12 @@ namespace Shaman.Dokan
             return NtStatus.DiskFull;
         }
 
+        public override NtStatus WriteFile(string fileName, IntPtr buffer, uint bufferLength, out int bytesWritten, long offset, IDokanFileInfo info)
+        {
+            bytesWritten = 0;
+            return NtStatus.DiskFull;
+        }
+
         public override NtStatus SetAllocationSize(string fileName, long length, IDokanFileInfo info)
         {
             return NtStatus.DiskFull;
