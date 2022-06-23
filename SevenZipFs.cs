@@ -167,12 +167,13 @@ namespace Shaman.Dokan
             var item = GetNode(root, usableName, out var name);
             if (item == null) { return false; }
             if (item == root) { return true; }
+            RootFolder = "/" + string.Join("/"
+                , newRootFolder.Split(new char[] { '\\' }, StringSplitOptions.RemoveEmptyEntries));
             if (item.Info.IsDirectory)
             {
                 root = item;
                 TotalSize = 0;
                 ForEach(root, file => TotalSize += file.Info.Size);
-                RootFolder = string.Join("/", newRootFolder.Split(new char[] { '\\' }, StringSplitOptions.RemoveEmptyEntries));
             }
             else
             {
@@ -180,7 +181,7 @@ namespace Shaman.Dokan
                 newRoot.Children[name] = item;
                 root = newRoot;
                 TotalSize = item.Info.Size;
-                RootFolder = ".../" + (newRootFolder.Length < 20 ? newRootFolder : name);
+                RootFolder = RootFolder.Length <= 20 ? RootFolder : ".../" + name;
             }
             TotalSize = Math.Max(TotalSize, 1024);
             return true;

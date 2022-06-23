@@ -6,6 +6,7 @@ using SevenZip;
 using System.IO;
 using DokanNet;
 using System.Threading;
+using System.Collections.Generic;
 
 namespace Shaman.Dokan
 {
@@ -13,6 +14,9 @@ namespace Shaman.Dokan
     {
         delegate int ExtractArg(string argName, out string value, string argName2 = null);
 
+#pragma warning disable CS0078
+        private const long k1 = 1l;
+#pragma warning restore CS0078
         private static string _password = null;
         private static bool _hasReadPW = false;
 
@@ -52,9 +56,9 @@ namespace Shaman.Dokan
             };
             extractArg("-l", out var labelName);
             extractArg("-p", out _password);
-            string[] extractorFlags = new string[0];
-            while (extractArg("-c", out var extractorFlag, "-O") >= 0)
-                extractorFlags = extractorFlags.Concat((extractorFlag ?? "").Split(',', ';')).ToArray();
+            string[] extractorSwitches = new string[0];
+            while (extractArg("-s", out var extractorFlag) >= 0)
+                extractorSwitches = extractorSwitches.Concat((extractorFlag ?? "").Split(',', ';')).ToArray();
             var parallelIndex = extractArg("-j", out var parallelNum);
 
             var opts = " " + string.Join(" ", args.Take(dashTwo).Where(i => i.Length > 1 && i[0] == '-')
@@ -64,7 +68,7 @@ namespace Shaman.Dokan
             {
                 Console.WriteLine("Usage: Dokan2.Archive.exe [-aAdDeotv]\n" +
                     "            archive-file Drive: [root-folder]\n" +
-                    "            [-l label] [-j parallel-tasks] [-c/-O extractor-flags] [-p [password]]");
+                    "            [-l label] [-j parallel-tasks] [-s extractor-switches] [-p [password]]");
                 return 0;
             }
 
@@ -143,12 +147,24 @@ namespace Shaman.Dokan
             }
             var kProcessors = Environment.ProcessorCount;
             {
-                extractorFlags = new string[]
-                {
-                    "crc0", "mt" + (kProcessors >= 8 ? 4 : kProcessors >= 4 ? 2 : 1)
-                }.Concat(extractorFlags.Where(i => i.Length > 0)).ToArray();
-                fs.extractor.SetProperties(extractorFlags);
-                extractorFlags = null;
+                var format = fs.extractor.Format;
+                List<string> defaultSwitches = new List<string>();
+                if ((((k1 << (int)InArchiveFormat.SevenZip | k1 << (int)InArchiveFormat.XZ
+                        | k1 << (int)InArchiveFormat.Zip) >> (int)format) & k1) != 0)
+                    defaultSwitches.Add("crc0");
+                if ((((k1 << (int)InArchiveFormat.SevenZip | k1 << (int)InArchiveFormat.XZ
+                        | k1 << (int)InArchiveFormat.Zip | k1 << (int)InArchiveFormat.BZip2
+                        | k1 << (int)InArchiveFormat.GZip | k1 << (int)InArchiveFormat.Swf
+                    ) >> (int)format) & k1) != 0)
+                    defaultSwitches.Add("mt" + (kProcessors >= 8 ? 4 : kProcessors >= 4 ? 2 : 1));
+                extractorSwitches = defaultSwitches.Concat(extractorSwitches.Where(i => i.Length > 0)).ToArray();
+                if (DebugSelf && extractorSwitches.Length > defaultSwitches.Count)
+                    Console.WriteLine("  Extractor switches: {0} + {1}", string.Join(", ", defaultSwitches)
+                        , string.Join(", ", extractorSwitches.Skip(defaultSwitches.Count)));
+                else if (VerboseOutput)
+                    Console.WriteLine("  Default extractor switches: {0}", string.Join(", ", defaultSwitches));
+                fs.extractor.SetProperties(extractorSwitches);
+                extractorSwitches = null;
             }
             if (fs.Encrypted && !_hasReadPW)
             {
@@ -197,9 +213,9 @@ namespace Shaman.Dokan
             {
                 var label = fs.VolumeLabel = Path.GetFileNameWithoutExtension(file).Trim();
                 var root = fs.RootFolder;
-                if (!string.IsNullOrEmpty(root) && root.StartsWith(label + "/"))
-                    root = "./" + root.Substring(label.Length + 1);
-                label = !string.IsNullOrEmpty(label) ? $"{label} ({root})" : root;
+                if (!string.IsNullOrEmpty(root) && root.StartsWith("/" + label))
+                    root = "/." + root.Substring(label.Length + 1);
+                label = !string.IsNullOrEmpty(label) ? !string.IsNullOrEmpty(root) ? $"{label} ({root})" : label : root;
                 fs.VolumeLabel = label;
             }
             fs.OnMount = (drive) =>

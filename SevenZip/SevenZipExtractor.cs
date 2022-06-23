@@ -102,9 +102,12 @@ namespace SevenZip
         {
             if (args.Length == 0)
                 return;
-            var setter = (ISetProperties)_archive;
+            var setter = _archive as ISetProperties;
             if (setter == null)
+            {
+                Console.Error.WriteLine("The format {0} doesn't support property setter", _format);
                 return;
+            }
             if (props == null)
             {
                 props = new PropVariant[args.Length];
@@ -114,7 +117,7 @@ namespace SevenZip
             int ret = setter.SetProperties(args, props, (uint)args.Length);
             if (ret != 0)
                 Console.Error.WriteLine("The format {0} doesn't support {1}: error = {2}"
-                    , _format.ToString(), args[0], ret);
+                    , _format, string.Join(", ", args), ret);
         }
 
         /// <summary>
@@ -270,10 +273,10 @@ namespace SevenZip
         /// <exception cref="System.ObjectDisposedException" />
         private void DisposedCheck()
         {
-            if (_disposed)
-            {
-                throw new ObjectDisposedException("SevenZipExtractor");
-            }
+            // if (_disposed)
+            // {
+            //     throw new ObjectDisposedException("SevenZipExtractor");
+            // }
         }
 
         #region Core private functions

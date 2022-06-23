@@ -345,6 +345,8 @@ namespace Shaman.Dokan
             public Dictionary<string, FsNode> Children;
 
             public override int GetHashCode() { return Info.Index; }
+
+            public FsNode Add(string childName, FsNode child) { Children.Add(childName, child); return this; }
         }
 
         public static FsNode NewDirectory()
@@ -423,6 +425,20 @@ namespace Shaman.Dokan
                 if (watch.ElapsedMilliseconds >= 300 || SevenZipProgram.VerboseOutput)
                     Console.WriteLine("  Parsed in {0} ms ...", watch.ElapsedMilliseconds);
             }
+            foreach (var invalidName in new[] { "..", "."})
+                if (root.Children.TryGetValue(invalidName, out var selfChild))
+                {
+                    if (SevenZipProgram.VerboseOutput)
+                        Console.WriteLine("  Auto {0} a top level \"{1}\" folder"
+                            , root.Children.Count == 1 ? "skip" : "rename", invalidName);
+                    if (root.Children.Count == 1)
+                        root = selfChild.Children != null ? selfChild : NewDirectory().Add("self", root);
+                    else
+                    {
+                        root.Children.Remove(invalidName);
+                        root.Children["@" + invalidName] = selfChild;
+                    }
+                }
             GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, false, true);
             return root;
         }
