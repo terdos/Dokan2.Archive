@@ -8,7 +8,7 @@
 // </auto-generated>
 //------------------------------------------------------------------------------
 
-namespace Shaman.Dokan.Archive.DokanNet.Properties {
+namespace Dokan2.Archive.DokanNet.Properties {
     using System;
     
     
@@ -39,7 +39,7 @@ namespace Shaman.Dokan.Archive.DokanNet.Properties {
         public static global::System.Resources.ResourceManager ResourceManager {
             get {
                 if (object.ReferenceEquals(resourceMan, null)) {
-                    global::System.Resources.ResourceManager temp = new global::System.Resources.ResourceManager("Shaman.Dokan.Archive.DokanNet.Properties.Resources", typeof(Resources).Assembly);
+                    global::System.Resources.ResourceManager temp = new global::System.Resources.ResourceManager("Dokan2.Archive.DokanNet.Properties.Resources", typeof(Resources).Assembly);
                     resourceMan = temp;
                 }
                 return resourceMan;
