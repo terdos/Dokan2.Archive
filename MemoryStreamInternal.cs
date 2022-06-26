@@ -15,8 +15,6 @@ namespace Shaman.Dokan
             this.capacity = length;
         }
 
-        public long Length => length;
-
         public readonly int capacity;
         public volatile int length;
         internal volatile byte[] data;

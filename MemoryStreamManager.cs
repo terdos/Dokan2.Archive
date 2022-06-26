@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -9,16 +10,15 @@ namespace Shaman.Dokan
 {
     public sealed class MemoryStreamManager
     {
-        private Action<FsNode, MemoryStreamInternal> write;
         public readonly FsNode Item;
         public long Length;
 
+        private int usageToken;
         private MemoryStreamInternal ms;
 
         private volatile bool completed;
-        public MemoryStreamManager(Action<FsNode, MemoryStreamInternal> load, FsNode item)
+        public MemoryStreamManager(FsNode item)
         {
-            write = load;
             Item = item;
             Length = (long)item.Info.Size;
         }
@@ -32,18 +32,18 @@ namespace Shaman.Dokan
         {
             if (exception != null) throw new Exception(exception);
             var waitTime = 8;
-            while (ms.Length < position + count && !completed)
+            while (ms.length < position + count && !completed)
             {
-                Interlocked.MemoryBarrier();
                 Thread.Sleep(waitTime);
+                Interlocked.MemoryBarrier();
                 waitTime *= 2;
-                if (exception != null) throw new Exception(exception);
+                if (waitTime > 30_000 && exception != null) throw new Exception(exception);
             }
 
             lock (ms)
             {
                 var data = ms.data;
-                var tocopy = (int)Math.Min(count, ms.Length - position);
+                var tocopy = (int)Math.Min(count, ms.length - position);
                 if (position > ms.length) return 0;
                 if (tocopy <= 0)
                     return 0;
@@ -51,7 +51,7 @@ namespace Shaman.Dokan
                 return tocopy;
             }
         }
-        private int usageToken;
+
         internal void DecrementUsage()
         {
             lock (this)
@@ -67,7 +67,7 @@ namespace Shaman.Dokan
                             isdisposed = true;
                             this.ms.Dispose();
                             MemoryStreamCache.DeleteItem(Item, this);
-                            if (SevenZipProgram.DebugSelf)
+                            if (SevenZipProgram.DebugSelf > 0)
                                 Console.WriteLine("Release reading buffer for 0x{0:X} at once"
                                     , Item.GetHashCode());
                             return;
@@ -85,8 +85,8 @@ namespace Shaman.Dokan
                                 isdisposed = true;
                                 this.ms.Dispose();
                                 MemoryStreamCache.DeleteItem(Item, this);
-                                if (SevenZipProgram.DebugSelf)
-                                    Console.WriteLine("Release reading buffer for 0x{0:X} and there're {1} left"
+                                if (SevenZipProgram.DebugSelf > 0)
+                                    Console.WriteLine("Release a reading buffer for 0x{0:X} and there're {1} left"
                                         , Item.GetHashCode(), MemoryStreamCache.TotalActive);
                             }
                         }
@@ -106,28 +106,30 @@ namespace Shaman.Dokan
                     ms = new MemoryStreamInternal((int)Length);
                     Task.Run(() =>
                     {
+                        var watch = SevenZipProgram.DebugSelf > 0 ? Stopwatch.StartNew() : null;
                         try
                         {
                             ms.DoAlloc();
-                            if (SevenZipProgram.DebugSelf)
+                            if (SevenZipProgram.DebugSelf > 0)
                                 Console.WriteLine("Now extract {0} bytes from 0x{1:X} in Worker #{2:X}"
                                     , Length, Item.GetHashCode(), Thread.CurrentThread.ManagedThreadId);
-                            write(Item, ms);
+                            Item.Extractor.ExtractFile(Item, ms);
                         }
                         catch (Exception ex)
                         {
                             // if isdisposed, then `ex` is because the Dokan2 output stream was closed
                             this.exception = ex.GetType().Name + ": " + ex.Message;
                             if (SevenZipProgram.VerboseOutput && !isdisposed)
-                                Console.WriteLine("Error: Can not extract 0x{0:X}: {1}", Item.GetHashCode()
+                                Console.Error.WriteLine("Error: Can not extract 0x{0:X}: {1}", Item.GetHashCode()
                                     , this.exception);
                         }
                         finally
                         {
-                            if (SevenZipProgram.DebugSelf && exception == null)
-                                Console.WriteLine("Got {0} {1} bytes from 0x{2:X}"
+                            watch?.Stop();
+                            if (SevenZipProgram.DebugSelf > 0 && exception == null)
+                                Console.WriteLine("Extracted {0} {1} bytes from 0x{2:X} in {3}ms"
                                     , ms.length == Length ? "all of" : "only " + ms.length + " in"
-                                    , Length, Item.GetHashCode());
+                                    , Length, Item.GetHashCode(), watch.ElapsedMilliseconds);
 
                             this.completed = true;
                         }
@@ -146,16 +148,13 @@ namespace Shaman.Dokan
 
     public sealed class ConsumerStream : Stream
     {
-        private MemoryStreamManager memoryStreamManager;
-        private long position;
-        static private int lastId;
-        private int id;
+        private MemoryStreamManager manager;
+        private long position, start;
+
         public ConsumerStream(MemoryStreamManager memoryStreamManager)
         {
-            this.memoryStreamManager = memoryStreamManager;
+            this.manager = memoryStreamManager;
             memoryStreamManager.IncrementUsage();
-            id = Interlocked.Increment(ref lastId);
-            //Console.WriteLine("Open: " + id);
         }
 
         public override bool CanRead => true;
@@ -164,7 +163,7 @@ namespace Shaman.Dokan
 
         public override bool CanWrite => false;
 
-        public override long Length => memoryStreamManager.Length;
+        public override long Length => manager.Length;
 
         public override long Position
         {
@@ -172,8 +171,15 @@ namespace Shaman.Dokan
             set
             {
                 if (position < 0) throw new ArgumentException();
-                if (position > memoryStreamManager.Length) throw new ArgumentException();
+                if (position > manager.Length) throw new ArgumentException();
+                if (position == value)
+                    return;
+                long old = position, oldStart = start;
                 position = value;
+                start = position;
+                if (SevenZipProgram.DebugSelf > 2)
+                    Console.WriteLine("Move a cursor from {0}+{1} to {2} in {3} bytes of 0x{4:X}"
+                        , oldStart, old - oldStart, position, Length, manager.Item.GetHashCode());
             }
         }
 
@@ -190,7 +196,7 @@ namespace Shaman.Dokan
         public int Read(IntPtr buffer, int offset, int count)
         {
             if (released != 0) return 0;
-            var r = memoryStreamManager.Read(position, buffer, offset, count);
+            var r = manager.Read(position, buffer, offset, count);
             position += r;
             return r;
         }
@@ -220,8 +226,11 @@ namespace Shaman.Dokan
         {
             if (Interlocked.Increment(ref released) == 1)
             {
-                //Console.WriteLine("Close: " + id);
-                memoryStreamManager.DecrementUsage();
+                manager.DecrementUsage();
+                if (SevenZipProgram.DebugSelf > 1)
+                    Console.WriteLine("Close a cursor at {0}+{1} = {2} in {3} bytes of 0x{4:X}"
+                        , start, position - start, position, Length
+                        , manager.Item.GetHashCode());
             }
         }
     }

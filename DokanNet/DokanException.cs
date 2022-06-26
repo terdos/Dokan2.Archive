@@ -1,6 +1,6 @@
 ﻿using System;
 using DokanNet.Properties;
-using Shaman.Dokan.Archive.DokanNet.Properties;
+using Dokan2.Archive.DokanNet.Properties;
 
 namespace DokanNet
 {

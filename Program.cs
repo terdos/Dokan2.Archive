@@ -12,26 +12,25 @@ namespace Shaman.Dokan
 {
     public class SevenZipProgram
     {
-        delegate int ExtractArg(string argName, out string value, string argName2 = null);
+        delegate int ExtractArg(string argName, out string value);
+        delegate bool ExtractIntOption(string argName, out int value);
 
-#pragma warning disable CS0078
-        private const long k1 = 1l;
-#pragma warning restore CS0078
         private static string _password = null;
         private static bool _hasReadPW = false;
+        private static int _debugSelf = 0;
 
-        public static bool VerboseOutput = false;
-        public static bool DebugSelf = false;
-        public static bool DebugDokan = false;
+        public static bool VerboseOutput { get; private set; } = false;
+        public static int DebugSelf { get => _debugSelf; private set => _debugSelf = value; }
+        public static bool DebugDokan { get; private set; } = false;
+        public static bool MixMode { get; private set; } = false;
 
         static int Main(string[] args)
         {
             var dashTwo = Array.FindIndex(args, i => i == "--");
             dashTwo = dashTwo >= 0 ? dashTwo : args.Length;
-            ExtractArg extractArg = (string argName, out string value, string argName2) =>
+            ExtractArg extractArg = (string argName, out string value) =>
             {
-                var index = Array.FindIndex(args
-                    , i => i.StartsWith(argName) || argName2 != null && i.StartsWith(argName2));
+                var index = Array.FindIndex(args, i => i.StartsWith(argName));
                 value = null;
                 if (index < 0 || index >= dashTwo) { }
                 else if (argName.Length == 3 && args[index].Length > argName.Length)
@@ -55,14 +54,15 @@ namespace Shaman.Dokan
                 return index;
             };
             extractArg("-l", out var labelName);
-            extractArg("-p", out _password);
+            var passwordIndex = extractArg("-p", out _password);
             string[] extractorSwitches = new string[0];
             while (extractArg("-s", out var extractorFlag) >= 0)
                 extractorSwitches = extractorSwitches.Concat((extractorFlag ?? "").Split(',', ';')).ToArray();
             var parallelIndex = extractArg("-j", out var parallelNum);
 
             var opts = " " + string.Join(" ", args.Take(dashTwo).Where(i => i.Length > 1 && i[0] == '-')
-                .Select(i => i[1] != '-' && i.Length > 2 ? "-" + string.Join(" -", i.Skip(1)) : i));
+                .Select(i => i[1] != '-' && i.Length > 2 && (i[2] < '0' || i[2] > '9')
+                            ? "-" + string.Join(" -", i.Skip(1)) : i));
             args = (dashTwo < args.Length ? args.Skip(dashTwo) : args.Where(i => i.Length == 0 || i[0] != '-')).ToArray();
             if (args.Length == 0 || opts.Contains("-h"))
             {
@@ -71,6 +71,19 @@ namespace Shaman.Dokan
                     "            [-l label] [-j parallel-tasks] [-s extractor-switches] [-p [password]]");
                 return 0;
             }
+            ExtractIntOption extractIntOption = (string argName, out int value) =>
+            {
+                value = 0;
+                var lastIndex = opts.LastIndexOf(argName);
+                if (lastIndex < 0)
+                    return false;
+                value = 1;
+                lastIndex += argName.Length;
+                var ind2 = opts.IndexOf(' ', lastIndex);
+                if (ind2 >= 0 && !int.TryParse(opts.Substring(lastIndex, ind2 - lastIndex), out value))
+                    value = 1;
+                return true;
+            };
 
             var file = args.FirstOrDefault();
             if (string.IsNullOrEmpty(file))
@@ -128,13 +141,16 @@ namespace Shaman.Dokan
                 }
             }
             DebugDokan = opts.Contains("-D");
-            DebugSelf = opts.Contains("-d") || DebugSelf;
-            VerboseOutput = DebugSelf || opts.Contains("-v");
+            if (extractIntOption("-d", out _debugSelf) && DebugSelf == 1 && DebugDokan)
+                DebugSelf = 9;
+            VerboseOutput = DebugSelf > 0 || opts.Contains("-v");
 
             SevenZipFs fs;
             try
             {
-                fs = new SevenZipFs(file);
+                fs = new SevenZipFs(extractorSwitches);
+                if (file != null)
+                    fs.LoadOneZip(file);
             }
             catch (Exception ex)
             {
@@ -146,43 +162,21 @@ namespace Shaman.Dokan
                 return 2;
             }
             var kProcessors = Environment.ProcessorCount;
-            {
-                var format = fs.extractor.Format;
-                List<string> defaultSwitches = new List<string>();
-                if ((((k1 << (int)InArchiveFormat.SevenZip | k1 << (int)InArchiveFormat.XZ
-                        | k1 << (int)InArchiveFormat.Zip) >> (int)format) & k1) != 0)
-                    defaultSwitches.Add("crc0");
-                if ((((k1 << (int)InArchiveFormat.SevenZip | k1 << (int)InArchiveFormat.XZ
-                        | k1 << (int)InArchiveFormat.Zip | k1 << (int)InArchiveFormat.BZip2
-                        | k1 << (int)InArchiveFormat.GZip | k1 << (int)InArchiveFormat.Swf
-                    ) >> (int)format) & k1) != 0)
-                    defaultSwitches.Add("mt" + (kProcessors >= 8 ? 4 : kProcessors >= 4 ? 2 : 1));
-                extractorSwitches = defaultSwitches.Concat(extractorSwitches.Where(i => i.Length > 0)).ToArray();
-                if (DebugSelf && extractorSwitches.Length > defaultSwitches.Count)
-                    Console.WriteLine("  Extractor switches: {0} + {1}", string.Join(", ", defaultSwitches)
-                        , string.Join(", ", extractorSwitches.Skip(defaultSwitches.Count)));
-                else if (VerboseOutput)
-                    Console.WriteLine("  Default extractor switches: {0}", string.Join(", ", defaultSwitches));
-                fs.extractor.SetProperties(extractorSwitches);
-                extractorSwitches = null;
-            }
-            if (fs.Encrypted && !_hasReadPW)
-            {
-                if (!fs.TryDecompress(true))
-                {
-                    Console.Out.Flush();
-                    Console.Error.WriteLine("Error: Password is wrong!");
-                    return 3;
-                }
-            }
             if (!string.IsNullOrEmpty(rootFolder) && !fs.SetRoot(rootFolder))
             {
                 Console.Error.WriteLine("Error: Root folder is not found in archive!");
                 return 4;
             }
-            if (!fs.Encrypted && !string.IsNullOrEmpty(_password) && !_hasReadPW)
+            var firstEncrypted = _hasReadPW ? null : fs.FindFirstEncrypted();
+            if (!_hasReadPW && firstEncrypted != null && !firstEncrypted.Extractor.TryDecrypt(firstEncrypted))
+            {
+                    Console.Out.Flush();
+                    Console.Error.WriteLine("Error: Password is wrong!");
+                    return 3;
+            }
+            if (firstEncrypted == null && !string.IsNullOrEmpty(_password) && !_hasReadPW)
                 Console.WriteLine("Warning: archive is not encrypted!");
-            _password = null;
+            firstEncrypted = null;
             if (!_hasReadPW)
                 fs.TryDecompress();
             Console.WriteLine("  Has loaded {0}", file);
@@ -190,8 +184,6 @@ namespace Shaman.Dokan
             {
                 Console.WriteLine("  Auto use \"{0}\" as root", fs.RootFolder);
             }
-            if (fs.extractor.IsSolid)
-                Console.WriteLine("Warning: mounting performance of solid archives is very poor!");
             if (opts.Contains("-e")) // test extraction only
             {
                 Console.WriteLine("  Test passed.");
@@ -281,8 +273,28 @@ namespace Shaman.Dokan
             _password = "";
             try
             {
-                while (string.IsNullOrEmpty(_password))
-                    _password = Console.ReadLine();
+                // from https://stackoverflow.com/a/3404522/5789722
+                var pass = "";
+                ConsoleKey key;
+                do
+                {
+                    var keyInfo = Console.ReadKey(intercept: true);
+                    key = keyInfo.Key;
+
+                    if (key == ConsoleKey.Backspace && pass.Length > 0)
+                    {
+                        Console.Write("\b \b");
+                        pass = pass.Substring(0, pass.Length - 1);
+                    }
+                    else if (!char.IsControl(keyInfo.KeyChar))
+                    {
+                        Console.Write("*");
+                        pass += keyInfo.KeyChar;
+                    }
+                } while (key != ConsoleKey.Enter);
+                Console.WriteLine("");
+                Interlocked.MemoryBarrier();
+                _password = pass;
             }
             catch (Exception)
             {

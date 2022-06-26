@@ -13,35 +13,62 @@ namespace Shaman.Dokan
     public class SevenZipFs : ReadOnlyFs
     {
 
-        public SevenZipExtractor extractor;
+        public SevenZipExtractor _extractor;
         private string FileSystemName;
         private FsNode root;
         private MemoryStreamCache cache;
         private ulong TotalSize;
-        public bool Encrypted { get; private set; } = false;
+        private readonly string[] UserSwitches;
+        public static readonly int kProcessors = Environment.ProcessorCount;
+        private static bool HasWarnedSolidPackage = false;
+
         public string RootFolder { get; private set; }
         public string VolumeLabel;
 
-        public SevenZipFs(string path)
+        public SevenZipFs(string[] extractorSwitches)
         {
-            extractor = new SevenZipExtractor(path);
-            FileSystemName = "ArchiveFS." + extractor.Format.ToString();
+            FileSystemName = "ArchiveFS";
             VolumeLabel = FileSystemName;
             TotalSize = 0;
-            root = CreateTree(extractor);
-            CollectInfo();
-            cache = new MemoryStreamCache(ExtractFile);
+            UserSwitches = extractorSwitches.Where(i => i.Length > 0).ToArray();
+            cache = new MemoryStreamCache();
         }
 
-        public void ExtractFile(FsNode item, MemoryStreamInternal stream)
+        public void LoadOneZip(string path)
         {
-            //lock (readerLock)
-            {
-                extractor.ExtractFile(item, stream);
-            }
+            var extractor = new SevenZipExtractor(path);
+            InitProperties(extractor, UserSwitches);
+            root = CreateTree(extractor);
+            TotalSize += CollectInfo(root);
+            if (!SevenZipProgram.MixMode)
+                FileSystemName += "." + extractor.Format.ToString();
+            if (!HasWarnedSolidPackage && (HasWarnedSolidPackage = extractor.IsSolid))
+                Console.WriteLine("Warning: mounting performance of solid archives is very poor!");
         }
 
-        private object readerLock = new object();
+        private static void InitProperties(SevenZipExtractor extractor, string[] userSwitches)
+        {
+#pragma warning disable CS0078
+            const long k1 = 1l;
+#pragma warning restore CS0078
+            var format = extractor.Format;
+            List<string> defaultSwitches = new List<string>();
+            if ((((k1 << (int)InArchiveFormat.SevenZip | k1 << (int)InArchiveFormat.XZ
+                    | k1 << (int)InArchiveFormat.Zip) >> (int)format) & k1) != 0)
+                defaultSwitches.Add("crc0");
+            if ((((k1 << (int)InArchiveFormat.SevenZip | k1 << (int)InArchiveFormat.XZ
+                    | k1 << (int)InArchiveFormat.Zip | k1 << (int)InArchiveFormat.BZip2
+                    | k1 << (int)InArchiveFormat.GZip | k1 << (int)InArchiveFormat.Swf
+                ) >> (int)format) & k1) != 0)
+                defaultSwitches.Add("mt" + (kProcessors >= 8 ? 4 : kProcessors >= 4 ? 2 : 1));
+            var extractorSwitches = defaultSwitches.Concat(userSwitches).ToArray();
+            if (SevenZipProgram.DebugSelf > 0 && extractorSwitches.Length > defaultSwitches.Count)
+                Console.WriteLine("  Extractor switches: {0} + {1}", string.Join(", ", defaultSwitches)
+                    , string.Join(", ", extractorSwitches.Skip(defaultSwitches.Count)));
+            else if (SevenZipProgram.VerboseOutput)
+                Console.WriteLine("  Default extractor switches: {0}", string.Join(", ", defaultSwitches));
+            extractor.SetProperties(extractorSwitches);
+        }
 
         public Action<string> OnMount;
 
@@ -59,13 +86,30 @@ namespace Shaman.Dokan
             return DokanResult.Success;
         }
 
-        public override NtStatus CreateFile(string fileName, FileAccess access, FileShare share, FileMode mode, FileOptions options, FileAttributes attributes, IDokanFileInfo info)
+        public override NtStatus CreateFile(string fileName, FileAccess access, FileShare share, FileMode mode
+            , FileOptions options, FileAttributes attributes, IDokanFileInfo info)
         {
             //if (IsBadName(fileName)) return NtStatus.ObjectNameInvalid;
             if ((access & ModificationAttributes) != 0) return NtStatus.DiskFull;
 
             var item = GetNode(root, fileName, out var _);
-            if (item == null) return DokanResult.FileNotFound;
+            if (item == null)
+            {
+                if (SevenZipProgram.DebugSelf > 1)
+                {
+                    int acc = (int) access;
+                    string name = null;
+                    for (int i = 0; i < 32; i++) {
+                        if ((acc & (1 << i)) != 0)
+                        {
+                            var str = Enum.GetName(typeof(FileAccess), 1 << i) ?? string.Format("0x{0:X}", (1 << i));
+                            name = name != null ? name + " | " + str : str;
+                        }
+                    }
+                    Console.WriteLine("Warning: File not found: {0} with access = {1}", fileName, name);
+                }
+                return DokanResult.FileNotFound;
+            }
             if (!item.Info.IsDirectory)
             {
                 if ((access & (FileAccess.ReadData | FileAccess.GenericRead)) != 0)
@@ -98,27 +142,53 @@ namespace Shaman.Dokan
             return NtStatus.Success;
         }
 
-        private FsNode GetFile(string fileName)
+        public override NtStatus FindFiles(string fileName, out IEnumerable<FileInformation> files, IDokanFileInfo info)
         {
-            return GetNode(root, fileName, out var _);
+            return FindFilesWithPattern(fileName, "*", out files, info);
         }
 
-        protected override IList<FileInformation> FindFilesHelper(string fileName, string searchPattern)
+        public override NtStatus FindFilesWithPattern(string fileName, string searchPattern
+            , out IEnumerable<FileInformation> files, IDokanFileInfo info)
         {
-            var item = GetFile(fileName);
-            if (item == null) return null;
+            var item = GetNode(root, fileName, out var baseName);
+            if (item == null)
+            {
+                if (SevenZipProgram.DebugSelf > 1)
+                {
+                    Console.WriteLine("Warning: search but not found: {0} with pattern = {1}", fileName, searchPattern);
+                }
+                files = null;
+                return NtStatus.ObjectNameNotFound;
+            }
 
             if (item.Info.IsDirectory)
             {
-                if (item.Children == null) return new FileInformation[] { };
                 if (searchPattern == "*")
                 {
-                    return item.Children.Select(x => GetFileInformation(x.Value, x.Key)).ToList();
+                    files = item.Children.Select(x => GetFileInformation(x.Value, x.Key));
                 }
-                var matcher = GetMatcher(searchPattern);
-                return item.Children.Where(x => matcher(x.Key)).Select(x => GetFileInformation(x.Value, x.Key)).ToList();
+                else
+                {
+                    var matcher = GetMatcher(searchPattern);
+                    files = item.Children.Where(x => matcher(x.Key)).Select(x => GetFileInformation(x.Value, x.Key));
+                }
+                return NtStatus.Success;
             }
-            return null;
+            else
+            {
+                // When 7zFM.exe v2107 opens a .7z/.tar file in a mounted drive,
+                // if double click a folder in the compressed package to show its children,
+                // it will access \path\to\zip.file with searchPattern=<inner path to the folder>
+                if (SevenZipProgram.DebugSelf > 0)
+                    Console.WriteLine("Warning: Unexpected search: {0} with pattern = {1}", fileName, searchPattern);
+                /**/
+                files = new[] { GetFileInformation(item, baseName) }.Skip(0);
+                return NtStatus.ObjectNameNotFound;
+                /*/
+                files = null;
+                return NtStatus.ResourceNameNotFound;
+                //*/
+            }
         }
 
         private FileInformation GetFileInformation(FsNode item, string name)
@@ -172,12 +242,14 @@ namespace Shaman.Dokan
             if (item.Info.IsDirectory)
             {
                 root = item;
-                TotalSize = 0;
-                ForEach(root, file => TotalSize += file.Info.Size);
+                ulong size = 0;
+                foreach (var file in root.AllFilesWithContent())
+                    size += file.Info.Size;
+                TotalSize = size;
             }
             else
             {
-                var newRoot = NewDirectory();
+                var newRoot = FsNode.NewDirectory();
                 newRoot.Children[name] = item;
                 root = newRoot;
                 TotalSize = item.Info.Size;
@@ -187,36 +259,10 @@ namespace Shaman.Dokan
             return true;
         }
 
-        public static void ForEach(FsNode root, Action<FsNode> OnFile)
-        {
-            IEnumerator<FsNode> top = root.Children.Values.GetEnumerator();
-            var stack = new Stack<IEnumerator<FsNode>>();
-            stack.Push(top);
-            while (stack.Count > 0)
-            {
-                top = stack.Pop();
-                while (top.MoveNext())
-                {
-                    var next = top.Current;
-                    if (next.Info.IsDirectory)
-                    {
-                        if (next.Children.Count > 0)
-                        {
-                            stack.Push(top);
-                            top = next.Children.Values.GetEnumerator();
-                        }
-                    }
-                    else
-                        OnFile(next);
-                }
-            }
-        }
-
-        public void CollectInfo()
+        public static ulong CollectInfo(FsNode root)
         {
             ulong total = 0;
-            bool encrypt = false;
-            ulong nameLen = 0;
+            //ulong nameLen = 0;
             DateTime Now = DateTime.Now, MaxDate = new DateTime(2099, 12, 31);
             bool iter(FsNode dir)
             {
@@ -224,7 +270,7 @@ namespace Shaman.Dokan
                 bool hasChildren = false;
                 foreach (var pair in dir.Children)
                 {
-                    nameLen += (ulong) pair.Key.Length;
+                    //nameLen += (ulong) pair.Key.Length;
                     var item = pair.Value;
                     if (item.Info.IsDirectory)
                     {
@@ -232,10 +278,7 @@ namespace Shaman.Dokan
                             continue;
                     }
                     else
-                    {
-                        encrypt = encrypt || item.Info.Encrypted;
                         total += item.Info.Size;
-                    }
                     ctime = ctime < item.Info.CreationTime ? ctime : item.Info.CreationTime;
                     mtime = mtime > item.Info.LastWriteTime ? mtime : item.Info.LastWriteTime;
                     hasChildren = true;
@@ -249,34 +292,19 @@ namespace Shaman.Dokan
             }
             iter(root);
             //Console.WriteLine(">>> nameLen = {0}", nameLen);
-            Encrypted = encrypt;
-            TotalSize = Math.Max(total, 1024);
+            return total;
         }
 
-        internal bool TryDecompress(bool onlyEncrypted = false)
+        public FsNode FindFirstEncrypted()
         {
-            IEnumerator<FsNode> top = root.Children.Values.GetEnumerator();
-            var stack = new Stack<IEnumerator<FsNode>>();
-            stack.Push(top);
-            while (stack.Count > 0)
-            {
-                top = stack.Pop();
-                while (top.MoveNext())
-                {
-                    var next = top.Current;
-                    if (next.Info.IsDirectory)
-                    {
-                        if (next.Children.Count > 0)
-                        {
-                            stack.Push(top);
-                            top = next.Children.Values.GetEnumerator();
-                        }
-                    }
-                    else if ((!onlyEncrypted || next.Info.Encrypted) && next.Info.Size > 0)
-                        return extractor.TryDecrypt(next);
-                }
-            }
-            return true;
+            var propVar = new PropVariant();
+            return root.AllFilesWithContent().FirstOrDefault(file => file.Extractor.IsEncrypted(file, ref propVar));
+        }
+
+        internal bool TryDecompress()
+        {
+            var firstFile = root.AllFilesWithContent().FirstOrDefault();
+            return firstFile?.Extractor.TryDecrypt(firstFile) ?? true;
         }
     }
 }

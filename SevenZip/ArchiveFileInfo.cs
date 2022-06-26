@@ -14,7 +14,7 @@ namespace SevenZip
         /// Gets or sets index of the file in the archive file table.
         /// </summary>
         // [CLSCompliant(false)]
-        public int Index;
+        public uint Index;
 
         /// <summary>
         /// Gets or sets file attributes.

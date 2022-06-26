@@ -28,7 +28,6 @@ namespace SevenZip
     {
 #if UNMANAGED
         public delegate void GetFileData(uint index, ref ArchiveFileInfo info, bool isDir);
-        private GetFileData _archiveFileData;
         public IInArchive _archive;
         private IInStream _archiveStream;
         private int _offset;
@@ -260,6 +259,12 @@ namespace SevenZip
             }
         }
 
+        internal bool IsEncrypted(FsNode item, ref PropVariant propVar)
+        {
+            _archive.GetProperty(item.Info.Index, ItemPropId.Encrypted, ref propVar);
+            return propVar.EnsuredBool;
+        }
+
         /// <summary>
         /// Gets or sets the value indicating whether to preserve the directory structure of extracted files.
         /// </summary>
@@ -368,16 +373,14 @@ namespace SevenZip
         /// Retrieves all information about the archive.
         /// </summary>
         /// <exception cref="SevenZip.SevenZipArchiveException"/>
-        private void GetArchiveInfo(bool disposeStream)
+        public GetFileData GetArchiveInfo()
         {
+            bool disposeStream = false;
             if (_archive == null)
             {
-                if (!ThrowException(null, new SevenZipArchiveException()))
-                {
-                    return;
-                }
+                ThrowException(null, new SevenZipArchiveException());
+                return null;
             }
-            else
             {
                 IInStream archiveStream;
 
@@ -387,7 +390,7 @@ namespace SevenZip
                         var openCallback = GetArchiveOpenCallback();
                         if (!OpenArchive(archiveStream, openCallback))
                         {
-                            return;
+                            return null;
                         }
                         if (openCallback.HasExceptions)
                             Console.WriteLine(">>> test 123", openCallback.Exceptions[0].ToString());
@@ -396,7 +399,8 @@ namespace SevenZip
                     }
                 _filesCount = _archive.GetNumberOfItems();
 
-                if (_filesCount != 0)
+                if (_filesCount == 0)
+                    return null;
                 {
                     if (_filesCount > 999 || Shaman.Dokan.SevenZipProgram.VerboseOutput)
                         Console.WriteLine("  Parsing {0} files in the archive ...", _filesCount);
@@ -414,9 +418,9 @@ namespace SevenZip
 
                     #region Getting archive items data
                     {
-                        _archiveFileData = (uint i, ref ArchiveFileInfo fileInfo, bool isDir) =>
+                        return (uint i, ref ArchiveFileInfo fileInfo, bool isDir) =>
                         {
-                            fileInfo.Index = (int)i;
+                            fileInfo.Index = i;
                             _archive.GetProperty(i, ItemPropId.LastWriteTime, ref data);
                             fileInfo.LastWriteTime = data.EnsuredDateTime;
                             _archive.GetProperty(i, ItemPropId.CreationTime, ref data);
@@ -530,7 +534,6 @@ namespace SevenZip
             }
 
             _archive = null;
-            _archiveFileData = null;
             
 	        if (_inStream != null)
 	        {
@@ -632,28 +635,6 @@ namespace SevenZip
 
         #endregion
 
-        #region Properties
-
-        /// <summary>
-        /// Gets the collection of ArchiveFileInfo with all information about files in the archive
-        /// </summary>
-        public GetFileData ArchiveFileData
-        {
-            get
-            {
-                DisposedCheck();
-                if (_archiveFileData == null)
-                    GetArchiveInfo(false);
-                return _archiveFileData;
-            }
-            set
-            {
-                _archiveFileData = null;
-            }
-        }
-
-        #endregion
-
         /// <summary>
         /// Performs the archive integrity test.
         /// </summary>
@@ -725,9 +706,9 @@ namespace SevenZip
 
             //try
             {
-                var indexes = new[] { (uint)index };
+                var indexes = new[] { index };
                 
-                using (var aec = GetArchiveExtractCallback(stream, (uint) index, indexes.Length))
+                using (var aec = GetArchiveExtractCallback(stream, index, indexes.Length))
                 {
                     //try
                     {
@@ -834,9 +815,9 @@ namespace SevenZip
             DisposedCheck();
             ClearExceptions();
             var index = file.Info.Index;
-            var indexes = new[] { (uint)index };
+            var indexes = new[] { index };
 
-            using (var aec = GetArchiveExtractCallback(null, (uint)index, indexes.Length))
+            using (var aec = GetArchiveExtractCallback(null, index, indexes.Length))
                 //try
                 {
                     aec.StopFakeStream();

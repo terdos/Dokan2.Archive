@@ -12,6 +12,7 @@ using FileAccess = DokanNet.FileAccess;
 using System.Diagnostics;
 using System.Threading;
 using SevenZip;
+using System.Collections;
 
 namespace Shaman.Dokan
 {
@@ -176,7 +177,7 @@ namespace Shaman.Dokan
             }
         }
 
-        public NtStatus FindFiles(string fileName, out IList<FileInformation> files, IDokanFileInfo info)
+        public virtual NtStatus FindFiles(string fileName, out IEnumerable<FileInformation> files, IDokanFileInfo info)
         {
             // This function is not called because FindFilesWithPattern is implemented
             // Return DokanResult.NotImplemented in FindFilesWithPattern to make FindFiles called
@@ -186,7 +187,7 @@ namespace Shaman.Dokan
         }
 
 
-        public NtStatus FindFilesWithPattern(string fileName, string searchPattern, out IList<FileInformation> files,
+        public virtual NtStatus FindFilesWithPattern(string fileName, string searchPattern, out IEnumerable<FileInformation> files,
             IDokanFileInfo info)
         {
             files = FindFilesHelper(fileName, searchPattern);
@@ -194,8 +195,10 @@ namespace Shaman.Dokan
             return Trace(nameof(FindFilesWithPattern), fileName, info, DokanResult.Success);
         }
 
-        protected abstract IList<FileInformation> FindFilesHelper(string fileName, string searchPattern);
-
+        protected virtual IList<FileInformation> FindFilesHelper(string fileName, string searchPattern)
+        {
+            throw new NotImplementedException(nameof(FindFilesHelper));
+        }
 
         protected virtual NtStatus Trace(string method, string fileName, IDokanFileInfo info, NtStatus result,
             params object[] parameters)
@@ -342,21 +345,68 @@ namespace Shaman.Dokan
         public sealed class FsNode
         {
             public ArchiveFileInfo Info;
-            public Dictionary<string, FsNode> Children;
+            private object _context;
+            public Dictionary<string, FsNode> Children
+            {
+                get
+                {
+#if DEBUG
+                    Debug.Assert(Info.IsDirectory);
+#endif
+                    return (Dictionary<string, FsNode>)_context;
+                }
+            }
+            public SevenZipExtractor Extractor
+            {
+                get
+                {
+#if DEBUG
+                    Debug.Assert(!Info.IsDirectory);
+#endif
+                    return (SevenZipExtractor)_context;
+                }
+            }
 
-            public override int GetHashCode() { return Info.Index; }
+            private FsNode(Dictionary<string, FsNode> dir) {
+                _context = dir;
+                Info.Attributes = (uint)FileAttributes.Directory;
+            }
+
+            public FsNode(SevenZipExtractor extractor)
+            {
+                _context = extractor;
+            }
+
+            public static FsNode NewDirectory()
+            {
+                return new FsNode(new Dictionary<string, FsNode>());
+            }
+
+            public override int GetHashCode() { return (int)Info.Index; }
 
             public FsNode Add(string childName, FsNode child) { Children.Add(childName, child); return this; }
-        }
 
-        public static FsNode NewDirectory()
-        {
-            var item = new FsNode()
+            public IEnumerable<FsNode> AllFilesWithContent()
             {
-                Children = new Dictionary<string, FsNode>()
-            };
-            item.Info.Attributes = (uint)FileAttributes.Directory;
-            return item;
+                IEnumerator<FsNode> top = this.Children.Values.GetEnumerator();
+                var stack = new Stack<IEnumerator<FsNode>>();
+                stack.Push(top);
+                while (stack.Count > 0)
+                    for (top = stack.Pop(); top.MoveNext();)
+                    {
+                        var next = top.Current;
+                        if (!next.Info.IsDirectory)
+                        {
+                            if (next.Info.Size > 0)
+                                yield return next;
+                        }
+                        else if (next.Children.Count > 0)
+                        {
+                            stack.Push(top);
+                            top = next.Children.Values.GetEnumerator();
+                        }
+                    }
+            }
         }
 
         protected static FsNode GetNode(FsNode root, string path, out string baseName)
@@ -366,7 +416,7 @@ namespace Shaman.Dokan
             var current = root;
             baseName = components.LastOrDefault();
             foreach (var item in components)
-                if (current.Children?.TryGetValue(item, out current) != true)
+                if (!current.Info.IsDirectory || current.Children.TryGetValue(item, out current) != true)
                     return null;
             return current;
         }
@@ -375,7 +425,7 @@ namespace Shaman.Dokan
 
         public static FsNode CreateTree(SevenZipExtractor extractor)
         {
-            var iter = extractor.ArchiveFileData;
+            var iter = extractor.GetArchiveInfo();
             GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, false, true);
             var filesCount = extractor.FilesCount;
 
@@ -383,7 +433,7 @@ namespace Shaman.Dokan
                 ? Stopwatch.StartNew() : null;
             var dict = new Dictionary<string, FsNode>(StringComparer.Ordinal);
 
-            var root = NewDirectory();
+            var root = FsNode.NewDirectory();
             dict[string.Empty] = root;
             var prop = new PropVariant();
             try
@@ -402,14 +452,14 @@ namespace Shaman.Dokan
                         dir = dir + '\\' + name;
                         if (!dict.TryGetValue(dir, out f))
                         {
-                            f = NewDirectory();
+                            f = FsNode.NewDirectory();
                             directory.Children[name] = f;
                             dict[dir] = f;
                         }
                     }
                     else
                     {
-                        f = new FsNode();
+                        f = new FsNode(extractor);
                         directory.Children[name.Length > 0 ? name : "" + i] = f;
                     }
                     iter(i, ref f.Info, isDir);
@@ -425,6 +475,9 @@ namespace Shaman.Dokan
                 if (watch.ElapsedMilliseconds >= 300 || SevenZipProgram.VerboseOutput)
                     Console.WriteLine("  Parsed in {0} ms ...", watch.ElapsedMilliseconds);
             }
+#pragma warning disable IDE0059
+            iter = null;
+#pragma warning restore IDE0059
             foreach (var invalidName in new[] { "..", "."})
                 if (root.Children.TryGetValue(invalidName, out var selfChild))
                 {
@@ -432,7 +485,7 @@ namespace Shaman.Dokan
                         Console.WriteLine("  Auto {0} a top level \"{1}\" folder"
                             , root.Children.Count == 1 ? "skip" : "rename", invalidName);
                     if (root.Children.Count == 1)
-                        root = selfChild.Children != null ? selfChild : NewDirectory().Add("self", root);
+                        root = selfChild.Info.IsDirectory ? selfChild : FsNode.NewDirectory().Add("self", root);
                     else
                     {
                         root.Children.Remove(invalidName);
@@ -452,7 +505,7 @@ namespace Shaman.Dokan
             var parentPath = lastSlash >= 0 ? path.Substring(0, lastSlash) : "";
             if (!dict.TryGetValue(parentPath, out var parent))
                 parent = EnsureDirectory(parentPath, dict);
-            var dir = NewDirectory();
+            var dir = FsNode.NewDirectory();
             return dict[path] = parent.Children[filename] = dir;
         }
 

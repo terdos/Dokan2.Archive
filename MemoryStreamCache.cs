@@ -11,13 +11,7 @@ namespace Shaman.Dokan
 {
     public class MemoryStreamCache
     {
-        private Action<FsNode, MemoryStreamInternal> load;
-        public MemoryStreamCache(Action<FsNode, MemoryStreamInternal> load)
-        {
-            this.load = load;
-        }
-
-        public static volatile int TotalActive;
+        public static volatile int TotalActive = 0;
 
         public static readonly Dictionary<FsNode, MemoryStreamManager> streams
             = new Dictionary<FsNode, MemoryStreamManager>();
@@ -40,11 +34,11 @@ namespace Shaman.Dokan
                 {
                     TotalActive++;
                 }
-                if (SevenZipProgram.VerboseOutput)
+                if (SevenZipProgram.DebugSelf > 0)
                     Console.WriteLine("  Now read a file of 0x{0:X} by Thread #{1:X}", item.GetHashCode()
                         , Thread.CurrentThread.GetHashCode());
 
-                ms = new MemoryStreamManager(load, item);
+                ms = new MemoryStreamManager(item);
                 streams[item] = ms;
                 return ms.CreateStream();
 

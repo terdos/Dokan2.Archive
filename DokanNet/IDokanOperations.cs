@@ -149,7 +149,7 @@ namespace DokanNet
         /// <param name="info">An <see cref="IDokanFileInfo"/> with information about the file or directory.</param>
         /// <returns><see cref="NtStatus"/> or <see cref="DokanResult"/> appropriate to the request result.</returns>
         /// <seealso cref="FindFilesWithPattern"/>
-        NtStatus FindFiles(string fileName, out IList<FileInformation> files, IDokanFileInfo info);
+        NtStatus FindFiles(string fileName, out IEnumerable<FileInformation> files, IDokanFileInfo info);
 
         /// <summary>
         /// Same as <see cref="FindFiles"/> but with a search pattern to filter the result.
@@ -163,7 +163,7 @@ namespace DokanNet
         NtStatus FindFilesWithPattern(
             string fileName,
             string searchPattern,
-            out IList<FileInformation> files,
+            out IEnumerable<FileInformation> files,
             IDokanFileInfo info);
 
         /// <summary>
