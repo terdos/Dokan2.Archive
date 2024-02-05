@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Shaman.Dokan
+namespace Dokan2.Archive
 {
     static class NativeMethods
     {

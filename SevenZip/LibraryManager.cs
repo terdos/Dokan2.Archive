@@ -1,7 +1,7 @@
 namespace SevenZip
 {
     using Microsoft.Win32;
-    using Shaman.Dokan;
+    using Dokan2.Archive;
     using System;
     using System.Collections.Generic;
     using System.Configuration;

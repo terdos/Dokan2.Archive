@@ -1,6 +1,6 @@
 namespace SevenZip
 {
-    using Shaman.Dokan;
+    using Dokan2.Archive;
     using System;
     using System.Collections.Generic;
     using System.Globalization;
@@ -267,7 +267,7 @@ namespace SevenZip
         /// <inheritdoc />
         public int CryptoGetTextPassword(out string password)
         {
-            password = Shaman.Dokan.SevenZipProgram.InputPassword();
+            password = Dokan2.Archive.SevenZipProgram.InputPassword();
             return 0;
         }
 

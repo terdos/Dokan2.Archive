@@ -5,10 +5,11 @@ using System.Threading.Tasks;
 using SevenZip;
 using System.IO;
 using DokanNet;
+using DokanNet.Logging;
 using System.Threading;
 using System.Collections.Generic;
 
-namespace Shaman.Dokan
+namespace Dokan2.Archive
 {
     public class SevenZipProgram
     {
@@ -229,9 +230,9 @@ namespace Shaman.Dokan
             };
             try
             {
-                using (var dokan = new DokanNet.Dokan(new DokanNet.Logging.NullLogger()))
+                using (var dokan = new Dokan(new NullLogger()))
                 {
-                    var builder = new DokanNet.DokanInstanceBuilder(dokan);
+                    var builder = new DokanInstanceBuilder(dokan);
                     builder.ConfigureOptions(options =>
                     {
                         options.MountPoint = isDrive ? mountPoint.ToUpper() + ":" : mountPoint;

@@ -8,7 +8,7 @@ using DokanNet;
 using SevenZip;
 using FileAccess = DokanNet.FileAccess;
 
-namespace Shaman.Dokan
+namespace Dokan2.Archive
 {
     public class SevenZipFs : ReadOnlyFs
     {

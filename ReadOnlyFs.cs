@@ -3,7 +3,7 @@ using System.IO;
 using System.Security.AccessControl;
 using DokanNet;
 
-namespace Shaman.Dokan
+namespace Dokan2.Archive
 {
     public abstract class ReadOnlyFs : FileSystemBase
     {

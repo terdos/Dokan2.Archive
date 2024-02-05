@@ -9,8 +9,8 @@ namespace SevenZip
     using System.Linq;
 
     using SevenZip.Sdk.Compression.Lzma;
-    using Shaman.Dokan;
-    using static Shaman.Dokan.FileSystemBase;
+    using Dokan2.Archive;
+    using static Dokan2.Archive.FileSystemBase;
 
     /// <summary>
     /// Class to unpack data from archives supported by 7-Zip.
@@ -402,7 +402,7 @@ namespace SevenZip
                 if (_filesCount == 0)
                     return null;
                 {
-                    if (_filesCount > 999 || Shaman.Dokan.SevenZipProgram.VerboseOutput)
+                    if (_filesCount > 999 || Dokan2.Archive.SevenZipProgram.VerboseOutput)
                         Console.WriteLine("  Parsing {0} files in the archive ...", _filesCount);
                     var data = new PropVariant();
 

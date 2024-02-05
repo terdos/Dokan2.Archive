@@ -14,7 +14,7 @@ using System.Threading;
 using SevenZip;
 using System.Collections;
 
-namespace Shaman.Dokan
+namespace Dokan2.Archive
 {
     public abstract class FileSystemBase : IDokanOperationsUnsafe
     {
@@ -29,7 +29,7 @@ namespace Shaman.Dokan
 
 
         public abstract void Cleanup(string fileName, IDokanFileInfo info);
-        public abstract NtStatus CreateFile(string fileName, DokanNet.FileAccess access, FileShare share, FileMode mode, FileOptions options, FileAttributes attributes, IDokanFileInfo info);
+        public abstract NtStatus CreateFile(string fileName, FileAccess access, FileShare share, FileMode mode, FileOptions options, FileAttributes attributes, IDokanFileInfo info);
         public abstract NtStatus DeleteDirectory(string fileName, IDokanFileInfo info);
         public abstract NtStatus DeleteFile(string fileName, IDokanFileInfo info);
         public abstract NtStatus GetFileInformation(string fileName, out FileInformation fileInfo, IDokanFileInfo info);
@@ -215,7 +215,7 @@ namespace Shaman.Dokan
         }
 
         protected virtual NtStatus Trace(string method, string fileName, IDokanFileInfo info,
-            DokanNet.FileAccess access, FileShare share, FileMode mode, FileOptions options, FileAttributes attributes,
+            FileAccess access, FileShare share, FileMode mode, FileOptions options, FileAttributes attributes,
             NtStatus result)
         {
 #if TRACE

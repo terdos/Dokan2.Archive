@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Shaman.Dokan
+namespace Dokan2.Archive
 {
     public sealed class MemoryStreamInternal: IDisposable
     {

@@ -4,9 +4,9 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
-using static Shaman.Dokan.FileSystemBase;
+using static Dokan2.Archive.FileSystemBase;
 
-namespace Shaman.Dokan
+namespace Dokan2.Archive
 {
     public sealed class MemoryStreamManager
     {

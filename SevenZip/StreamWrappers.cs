@@ -1,6 +1,6 @@
 namespace SevenZip
 {
-    using Shaman.Dokan;
+    using Dokan2.Archive;
     using System;
     using System.Collections.Generic;
     using System.Globalization;

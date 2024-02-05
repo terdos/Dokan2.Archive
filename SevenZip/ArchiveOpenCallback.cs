@@ -158,7 +158,7 @@ namespace SevenZip
         /// <returns>Zero if everything is OK</returns>
         public int CryptoGetTextPassword(out string password)
         {
-            password = Shaman.Dokan.SevenZipProgram.InputPassword();
+            password = Dokan2.Archive.SevenZipProgram.InputPassword();
             return 0;
         }
 
