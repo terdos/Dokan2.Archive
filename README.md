@@ -1,20 +1,27 @@
-## 7zip mounter
-Mounts 7zip/ZIP/RAR files (read only) using Dokany (Dokan 2).
+# Archive mounter for Dokan
 
-Usage: `Dokan2.Archive.exe <path-to-archive> X: [-ovd] [-p [password]]`
-
-The archive is mounted in `X:\`. When `-o` or `--open` is specified, the mounted drive is opened in Explorer.
+Mounts archive files (read only) using Dokany (Dokan 2).
 
 Supports all the formats supported by [7-Zip](https://www.7-zip.org/).
 
-Requires [Dokan 2.0+](http://dokan-dev.github.io/).
+This fork implements a GitHub action that provides a working executable automatically at each release.
+
+**Note**: At the moment a `nupkg` package is provided that includes the main executable (check the *Actions* tab of GitHub).
+
+## Installation
+
+Requires [Dokan 2](http://dokan-dev.github.io/).
+
+Copy the `Dokan2.Archive.exe` file to a working *Path* (such as `C:\Windows`) for a seamless experience.
+
+## Usage
+
+`Dokan2.Archive.exe <path-to-archive> X: [-ovd] [-p [password]]`
+
+The archive is mounted in `X:\`. When `-o` or `--open` is specified, the mounted drive is opened in Explorer.
 
 ## License
 
-The code in `Shaman.Dokan` namespace is based on [Andrea Martinelli (@antiufo)](https://github.com/antiufo)'s
-  [Shaman.Dokan.Archive](https://github.com/antiufo/Shaman.Dokan.Archive),
-  and modified by [@gdh1995](https://github.com/gdh1995).
-  These code has no license, and is PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
+This repository is a fork of [@gdh1995](https://github.com/gdh1995), based on [Shaman.Dokan.Archive](https://github.com/antiufo/Shaman.Dokan.Archive).
 
-The folder named `DokanNet` and `SevenZip` are copied from other projects,
-so all rights belong to their project owners.
+All rights belong to their project owners, please refer to the source repositories for further informations.
