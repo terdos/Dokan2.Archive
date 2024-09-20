@@ -22,6 +22,6 @@ The archive is mounted in `X:\`. When `-o` or `--open` is specified, the mounted
 
 ## License
 
-This repository is a fork of [@meee1](https://github.com/meee1), based on [Shaman.Dokan.Archive](https://github.com/antiufo/Shaman.Dokan.Archive).
+This repository is a fork of [@nedex](https://github.com/nedex), based on [Shaman.Dokan.Archive](https://github.com/antiufo/Shaman.Dokan.Archive).
 
 All rights belong to their project owners, please refer to the source repositories for further informations.
